@@ -9,9 +9,9 @@ namespace AleCGN.Security.Cryptography
         KeySize256Bits = 256
     }
 
-    public static class SymmetricKeySizesExtensions
+    internal static class SymmetricKeySizesExtensions
     {
-        public static int ToBytesSize(this SymmetricKeySizes keySize)
+        internal static int ToBytesSize(this SymmetricKeySizes keySize)
             => (int)keySize / ConstantValues.BitsPerByte;
     }
 }

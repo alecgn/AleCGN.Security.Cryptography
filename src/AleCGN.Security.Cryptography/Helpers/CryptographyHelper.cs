@@ -2,9 +2,9 @@
 
 namespace AleCGN.Security.Cryptography.Helpers
 {
-    internal static class CryptographyHelper
+    public static class CryptographyHelper
     {
-        internal static byte[] GenerateSecureRandomBytes(int length)
+        public static byte[] GenerateSecureRandomBytes(int length)
         {
             var randomBytes = new byte[length];
 

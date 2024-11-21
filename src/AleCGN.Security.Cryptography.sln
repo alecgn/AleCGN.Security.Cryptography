@@ -5,6 +5,12 @@ VisualStudioVersion = 17.4.33213.308
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AleCGN.Security.Cryptography", "AleCGN.Security.Cryptography\AleCGN.Security.Cryptography.csproj", "{DAF1FE27-D03F-4EA2-ABF5-B9329A11C220}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "samples", "samples", "{70078990-9AA8-49E0-9EEC-64FC21B318BC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleApp_Net8", "..\samples\ConsoleApp_Net8\ConsoleApp_Net8.csproj", "{0B0B27DF-2A2A-43D4-A76C-D908C0E82DCA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleApp_Net4.8", "..\samples\ConsoleApp_Net4.8\ConsoleApp_Net4.8.csproj", "{6521C58E-CBEC-4445-AF7E-18DC6907A844}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,9 +21,21 @@ Global
 		{DAF1FE27-D03F-4EA2-ABF5-B9329A11C220}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{DAF1FE27-D03F-4EA2-ABF5-B9329A11C220}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{DAF1FE27-D03F-4EA2-ABF5-B9329A11C220}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B0B27DF-2A2A-43D4-A76C-D908C0E82DCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B0B27DF-2A2A-43D4-A76C-D908C0E82DCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B0B27DF-2A2A-43D4-A76C-D908C0E82DCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B0B27DF-2A2A-43D4-A76C-D908C0E82DCA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6521C58E-CBEC-4445-AF7E-18DC6907A844}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6521C58E-CBEC-4445-AF7E-18DC6907A844}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6521C58E-CBEC-4445-AF7E-18DC6907A844}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6521C58E-CBEC-4445-AF7E-18DC6907A844}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{0B0B27DF-2A2A-43D4-A76C-D908C0E82DCA} = {70078990-9AA8-49E0-9EEC-64FC21B318BC}
+		{6521C58E-CBEC-4445-AF7E-18DC6907A844} = {70078990-9AA8-49E0-9EEC-64FC21B318BC}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {22A79050-0013-4149-A85C-0501AD952183}
