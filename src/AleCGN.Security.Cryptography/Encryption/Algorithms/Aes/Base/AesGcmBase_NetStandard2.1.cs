@@ -2,6 +2,7 @@
 
 using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
+using AleCGN.Security.Cryptography.Encryption.Algorithms.Aes.Helpers;
 using AleCGN.Security.Cryptography.Helpers;
 using AleCGN.Security.Cryptography.Resources;
 using System;
@@ -17,7 +18,8 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         private const int _nonceSize = 12;
         private const int _tagSize = 16;
         private const int _encryptedDataMinimumSize = 1;
-        internal readonly IEncoder _encoder;
+        private readonly IEncoder _encoder;
+        private readonly AesKeySizes _aesKeySize;
         private AesGcm _aesGcm;
         private byte[] _key;
 
@@ -26,22 +28,31 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
         #region Constructors/destructors
 
-        public AesGcmBase(IEncoder encoder)
+        public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder)
         {
+            _aesKeySize = aesKeySize;
             _encoder = encoder;
         }
         
-        public AesGcmBase(IEncoder encoder, byte[] key)
+        public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder, byte[] key)
         {
+            _aesKeySize = aesKeySize;
             _encoder = encoder;
             _key = key;
+
+            ValidateAESKey();
+
             _aesGcm = new AesGcm(_key);
         }
 
-        public AesGcmBase(IEncoder encoder, string encodedKey)
+        public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder, string encodedKey)
         {
+            _aesKeySize = aesKeySize;
             _encoder = encoder;
             _key = _encoder.Decode(encodedKey);
+
+            ValidateAESKey();
+
             _aesGcm = new AesGcm(_key);
         }
 
@@ -119,6 +130,7 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         {
             _key = key;
 
+            ValidateAESKey();
             CreateNewAesGcmInstance();
         }
 
@@ -126,6 +138,7 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         {
             _key = _encoder.Decode(encodedKey);
 
+            ValidateAESKey();
             CreateNewAesGcmInstance();
         }
 
@@ -136,6 +149,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
 
         #region Private methods
+
+        private void ValidateAESKey()
+            => AesHelper.ValidateAESKey(_key, _aesKeySize);
 
         private void CheckInputData(byte[] inputData, string paramName)
         {

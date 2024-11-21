@@ -3,6 +3,7 @@
 using AleCGN.Security.Cryptography.Constants;
 using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
+using AleCGN.Security.Cryptography.Encryption.Algorithms.Aes.Helpers;
 using AleCGN.Security.Cryptography.Helpers;
 using AleCGN.Security.Cryptography.Resources;
 using Org.BouncyCastle.Crypto.Engines;
@@ -22,7 +23,8 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         private const int _tagSize = 16;
         private const int _tagBitsSize = _tagSize * ConstantValues.BitsPerByte;
         private const int _encryptedDataMinimumSize = 1;
-        internal readonly IEncoder _encoder;
+        private readonly IEncoder _encoder;
+        private readonly AesKeySizes _aesKeySize;
         private readonly GcmBlockCipher _gcmBlockCipher;
         private byte[] _key;
 
@@ -31,24 +33,31 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
         #region Constructors
 
-        public AesGcmBase(IEncoder encoder)
+        public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder)
         {
+            _aesKeySize = aesKeySize;
             _encoder = encoder;
             _gcmBlockCipher = new GcmBlockCipher(new AesEngine());
         }
 
-        public AesGcmBase(IEncoder encoder, byte[] key)
+        public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder, byte[] key)
         {
+            _aesKeySize = aesKeySize;
             _encoder = encoder;
             _key = key;
             _gcmBlockCipher = new GcmBlockCipher(new AesEngine());
+
+            ValidateAESKey();
         }
 
-        public AesGcmBase(IEncoder encoder, string encodedKey)
+        public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder, string encodedKey)
         {
+            _aesKeySize = aesKeySize;
             _encoder = encoder;
             _key = _encoder.Decode(encodedKey);
             _gcmBlockCipher = new GcmBlockCipher(new AesEngine());
+
+            ValidateAESKey();
         }
 
         #endregion Constructors
@@ -114,11 +123,15 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         public void SetOrUpdateKey(byte[] key)
         {
             _key = key;
+
+            ValidateAESKey();
         }
 
         public void SetOrUpdateKey(string encodedKey)
         {
             _key = _encoder.Decode(encodedKey);
+
+            ValidateAESKey();
         }
 
         #endregion Key set/update
@@ -128,6 +141,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
 
         #region Private methods
+
+        private void ValidateAESKey()
+            => AesHelper.ValidateAESKey(_key, _aesKeySize);
 
         private void CheckInputData(byte[] inputData, string paramName)
         {

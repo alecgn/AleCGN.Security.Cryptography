@@ -1,6 +1,6 @@
 ﻿namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 {
-    internal enum AesKeySizes
+    public enum AesKeySizes
     {
         KeySize128Bits = SymmetricKeySizes.KeySize128Bits,
         KeySize192Bits = SymmetricKeySizes.KeySize192Bits,

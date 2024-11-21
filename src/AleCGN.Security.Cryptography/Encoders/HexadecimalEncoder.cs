@@ -1,4 +1,5 @@
-﻿using AleCGN.Security.Cryptography.Resources;
+﻿using AleCGN.Security.Cryptography.Encoders.Extensions;
+using AleCGN.Security.Cryptography.Resources;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,7 +15,8 @@ namespace AleCGN.Security.Cryptography.Encoders
         private const int _hexadecimalBase = 16;
         private const string _hexadecimalPrefix = "0x";
         private const int _hexadecimalPrefixLength = 2;
-        private static readonly Regex _regexHexadecimalString = new Regex(LibraryResources.RegularExpression_HexadecimalString);
+        private static readonly Lazy<Regex> _regexHexadecimalString =
+            new Lazy<Regex>(() => new Regex(LibraryResources.RegularExpression_HexadecimalString));
 
         public string Encode(byte[] data)
         {
@@ -33,6 +35,16 @@ namespace AleCGN.Security.Cryptography.Encoders
             //return stringBuilder.ToString();
 
             return string.Concat(data.Select(b => b.ToString("X2")));
+        }
+
+        public string Encode(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(text));
+            }
+
+            return Encode(text.ToUTF8Bytes());
         }
 
         public byte[] Decode(string hexadecimalString)
@@ -71,7 +83,7 @@ namespace AleCGN.Security.Cryptography.Encoders
 
         private void CheckValidEncodedString(string hexadecimalString)
         {
-            if (hexadecimalString.Length % _hexadecimalChunkSize != 0 && !_regexHexadecimalString.IsMatch(hexadecimalString))
+            if (hexadecimalString.Length % _hexadecimalChunkSize != 0 && !_regexHexadecimalString.Value.IsMatch(hexadecimalString))
             {
                 ThrowFormattedArgumentException(LibraryResources.Validation_InvalidHexadecimalString, nameof(hexadecimalString));
             }

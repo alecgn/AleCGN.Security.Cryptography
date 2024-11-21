@@ -4,6 +4,8 @@
     {
         string Encode(byte[] data);
 
+        string Encode(string text);
+
         byte[] Decode(string encodedData);
     }
 }
