@@ -144,4 +144,10 @@
   <data name="Validation_InvalidHexadecimalString" xml:space="preserve">
     <value>Parameter '{0}' is not a valid hexadecimal string.</value>
   </data>
+  <data name="Validation_FileNotFound" xml:space="preserve">
+    <value>File not found.</value>
+  </data>
+  <data name="Validation_ArgumentOutOfRange" xml:space="preserve">
+    <value>Parameter '{0}' with value out of range, verify.</value>
+  </data>
 </root>

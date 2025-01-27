@@ -106,6 +106,15 @@ namespace AleCGN.Security.Cryptography.Resources {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Parameter &apos;{0}&apos; with value out of range, verify..
+        /// </summary>
+        internal static string Validation_ArgumentOutOfRange {
+            get {
+                return ResourceManager.GetString("Validation_ArgumentOutOfRange", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Parameter &apos;{0}&apos; cannot be null, empty or whitespace..
         /// </summary>
         internal static string Validation_ArgumentStringNullEmpytOrWhitespace {
@@ -120,6 +129,15 @@ namespace AleCGN.Security.Cryptography.Resources {
         internal static string Validation_EncryptedDataSize {
             get {
                 return ResourceManager.GetString("Validation_EncryptedDataSize", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to File not found..
+        /// </summary>
+        internal static string Validation_FileNotFound {
+            get {
+                return ResourceManager.GetString("Validation_FileNotFound", resourceCulture);
             }
         }
         
