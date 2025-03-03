@@ -46,7 +46,7 @@ namespace AleCGN.Security.Cryptography.Encoders
 
         private void CheckValidEncodedString(string base64String)
         {
-            if (base64String.Length % _base64ChunkSize != 0 && !_regexBase64String.Value.IsMatch(base64String))
+            if (base64String.Length % _base64ChunkSize != 0 || !_regexBase64String.Value.IsMatch(base64String))
             {
                 ThrowFormattedArgumentException(LibraryResources.Validation_InvalidBase64String, nameof(base64String));
             }
