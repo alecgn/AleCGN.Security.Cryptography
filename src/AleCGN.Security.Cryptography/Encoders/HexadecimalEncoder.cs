@@ -83,7 +83,7 @@ namespace AleCGN.Security.Cryptography.Encoders
 
         private void CheckValidEncodedString(string hexadecimalString)
         {
-            if (hexadecimalString.Length % _hexadecimalChunkSize != 0 && !_regexHexadecimalString.Value.IsMatch(hexadecimalString))
+            if (hexadecimalString.Length % _hexadecimalChunkSize != 0 || !_regexHexadecimalString.Value.IsMatch(hexadecimalString))
             {
                 ThrowFormattedArgumentException(LibraryResources.Validation_InvalidHexadecimalString, nameof(hexadecimalString));
             }
