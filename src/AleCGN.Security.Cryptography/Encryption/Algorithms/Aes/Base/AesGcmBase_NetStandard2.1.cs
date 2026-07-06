@@ -6,6 +6,8 @@ using AleCGN.Security.Cryptography.Encryption.Algorithms.Aes.Helpers;
 using AleCGN.Security.Cryptography.Resources;
 using System;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
 
 namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
@@ -58,6 +60,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         #region Encryption
 
         public byte[] EncryptData(byte[] data)
+            => EncryptData(data, null);
+
+        public byte[] EncryptData(byte[] data, byte[] associatedData)
         {
             CheckInputData(data, nameof(data));
             CheckKeySet();
@@ -71,17 +76,20 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
             RandomNumberGenerator.Fill(nonce);
 
-            _aesGcm.Encrypt(nonce, data, ciphertext, tag);
+            _aesGcm.Encrypt(nonce, data, ciphertext, tag, associatedData);
 
             return encryptedDataWithMetadata;
         }
 
         public string EncryptText(string text)
+            => EncryptText(text, null);
+
+        public string EncryptText(string text, byte[] associatedData)
         {
             CheckInputText(text, nameof(text));
 
             var textBytes = text.ToUTF8Bytes();
-            var encryptedTextBytesWithMetadata = EncryptData(textBytes);
+            var encryptedTextBytesWithMetadata = EncryptData(textBytes, associatedData);
 
             return _encoder.Encode(encryptedTextBytesWithMetadata);
         }
@@ -92,6 +100,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         #region Decryption
 
         public byte[] DecryptData(byte[] encryptedDataWithMetadata)
+            => DecryptData(encryptedDataWithMetadata, null);
+
+        public byte[] DecryptData(byte[] encryptedDataWithMetadata, byte[] associatedData)
         {
             CheckInputData(encryptedDataWithMetadata, nameof(encryptedDataWithMetadata));
             ValidateEncryptedDataWithMetadataSize(encryptedDataWithMetadata);
@@ -103,23 +114,55 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
             var nonce = encryptedDataWithMetadata.AsSpan(ciphertextLength + _tagSize, _nonceSize);
             var decryptedData = new byte[ciphertextLength];
 
-            _aesGcm.Decrypt(nonce, ciphertext, tag, decryptedData);
+            _aesGcm.Decrypt(nonce, ciphertext, tag, decryptedData, associatedData);
 
             return decryptedData;
         }
 
         public string DecryptText(string encryptedTextWithMetadata)
+            => DecryptText(encryptedTextWithMetadata, null);
+
+        public string DecryptText(string encryptedTextWithMetadata, byte[] associatedData)
         {
             CheckInputText(encryptedTextWithMetadata, nameof(encryptedTextWithMetadata));
 
             var encryptedDataWithMetadata = _encoder.Decode(encryptedTextWithMetadata);
-            var decryptedData = DecryptData(encryptedDataWithMetadata);
+            var decryptedData = DecryptData(encryptedDataWithMetadata, associatedData);
             var decryptedText = decryptedData.ToUTF8String();
 
             return decryptedText;
         }
 
         #endregion Decryption
+
+
+        #region Async
+
+        public Task<byte[]> EncryptDataAsync(byte[] data, CancellationToken cancellationToken = default)
+            => EncryptDataAsync(data, null, cancellationToken);
+
+        public Task<byte[]> EncryptDataAsync(byte[] data, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => EncryptData(data, associatedData), cancellationToken);
+
+        public Task<string> EncryptTextAsync(string text, CancellationToken cancellationToken = default)
+            => EncryptTextAsync(text, null, cancellationToken);
+
+        public Task<string> EncryptTextAsync(string text, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => EncryptText(text, associatedData), cancellationToken);
+
+        public Task<byte[]> DecryptDataAsync(byte[] encryptedDataWithMetadata, CancellationToken cancellationToken = default)
+            => DecryptDataAsync(encryptedDataWithMetadata, null, cancellationToken);
+
+        public Task<byte[]> DecryptDataAsync(byte[] encryptedDataWithMetadata, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => DecryptData(encryptedDataWithMetadata, associatedData), cancellationToken);
+
+        public Task<string> DecryptTextAsync(string encryptedTextWithMetadata, CancellationToken cancellationToken = default)
+            => DecryptTextAsync(encryptedTextWithMetadata, null, cancellationToken);
+
+        public Task<string> DecryptTextAsync(string encryptedTextWithMetadata, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => DecryptText(encryptedTextWithMetadata, associatedData), cancellationToken);
+
+        #endregion Async
 
 
         #region Key set/update

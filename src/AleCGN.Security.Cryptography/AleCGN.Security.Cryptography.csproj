@@ -1,29 +1,44 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;netstandard2.1;net8.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
     <AssemblyVersion>2.0.0</AssemblyVersion>
     <FileVersion>2.0.0</FileVersion>
     <Version>2.0.0</Version>
     <Authors>AleCGN</Authors>
     <Product>AleCGN</Product>
-    <Description>Library to perform cryptographic operations. Works with .NET Standard 2.0 and 2.1 (meets the range .NET Framework 4.6.1 to 4.8.1 | .NET (Core) 2.0 to 7.0).</Description>
+    <Description>Easy-to-use cryptographic library: AES-GCM and ChaCha20-Poly1305 (AEAD), RSA-OAEP, RSA-PSS and ECDSA signatures, hashes and HMAC (MD5/SHA1/SHA2), PBKDF2, Argon2id and HKDF key derivation, self-contained password hashing (PHC format), password-based and chunked file encryption, DPAPI wrapper, Base64/Base64Url/Base32/Hexadecimal encoders. Works with .NET Framework 4.6.1+, .NET (Core) 2.0+ and .NET 8+.</Description>
     <Copyright>AleCGN</Copyright>
     <PackageProjectUrl>https://github.com/alecgn/AleCGN.Security.Cryptography</PackageProjectUrl>
     <RepositoryUrl>https://github.com/alecgn/AleCGN.Security.Cryptography</RepositoryUrl>
-    <PackageTags>security;cryptography;encryption;decryption;dpapi;data protection;protected data;aes;aes gcm;base64;hexadecimal;key generation</PackageTags>
-    <PackageReleaseNotes>- DataProtection (wrapper for ProtectedData, Windows DPAPI)
-- Aes GCM (128, 192 and 256 bit)
-- Base64 Encoder/Decoder
-- Hexadecimal Encoder/Decoder
-- Symmetric Keys Generation Helper (Cryptographyc Secure Random)</PackageReleaseNotes>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PackageTags>security;cryptography;encryption;decryption;dpapi;data protection;aes;aes gcm;chacha20;poly1305;rsa;ecdsa;signature;hmac;pbkdf2;argon2;hkdf;password hashing;base64;base32;hexadecimal;key generation</PackageTags>
+    <PackageReleaseNotes>- AEAD: AES-GCM (128/192/256, with associated data) and ChaCha20-Poly1305
+- Asymmetric: RSA-OAEP encryption, RSA-PSS and ECDSA signatures, PEM key pair generation
+- Hash and HMAC: MD5, SHA1, SHA256, SHA384, SHA512 (data/text/file, sync and async)
+- Key derivation: PBKDF2, Argon2id, HKDF
+- Password hashing (PHC self-contained format) and password-based encryption
+- Chunked file encryption with progress and cancellation
+- DataProtection (Windows DPAPI wrapper)
+- Encoders: Base64, Base64Url, Base32, Hexadecimal
+- Symmetric key generation helper (cryptographically secure random)</PackageReleaseNotes>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">
-    <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <ItemGroup>

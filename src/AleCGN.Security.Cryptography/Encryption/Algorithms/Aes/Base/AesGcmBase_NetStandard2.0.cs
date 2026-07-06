@@ -11,6 +11,8 @@ using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
 using System;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
 
 namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
@@ -61,6 +63,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         #region Encryption
 
         public byte[] EncryptData(byte[] data)
+            => EncryptData(data, null);
+
+        public byte[] EncryptData(byte[] data, byte[] associatedData)
         {
             CheckInputData(data, nameof(data));
             CheckKeySet();
@@ -68,7 +73,7 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
             // Output layout: ciphertext || tag || nonce. BouncyCastle already emits
             // ciphertext and tag together, so it writes straight into the final buffer.
             var nonce = GenerateNonce();
-            var encryptedDataWithTagSize = InitCipherAndGetOutputSize(forEncryption: true, nonce, data.Length);
+            var encryptedDataWithTagSize = InitCipherAndGetOutputSize(forEncryption: true, nonce, associatedData, data.Length);
             var encryptedDataWithMetadata = new byte[encryptedDataWithTagSize + _nonceSize];
 
             var length = _gcmBlockCipher.ProcessBytes(data, 0, data.Length, encryptedDataWithMetadata, 0);
@@ -81,11 +86,14 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         }
 
         public string EncryptText(string text)
+            => EncryptText(text, null);
+
+        public string EncryptText(string text, byte[] associatedData)
         {
             CheckInputText(text, nameof(text));
 
             var textBytes = text.ToUTF8Bytes();
-            var encryptedTextBytesWithMetadata = EncryptData(textBytes);
+            var encryptedTextBytesWithMetadata = EncryptData(textBytes, associatedData);
 
             return _encoder.Encode(encryptedTextBytesWithMetadata);
         }
@@ -96,6 +104,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         #region Decryption
 
         public byte[] DecryptData(byte[] encryptedDataWithMetadata)
+            => DecryptData(encryptedDataWithMetadata, null);
+
+        public byte[] DecryptData(byte[] encryptedDataWithMetadata, byte[] associatedData)
         {
             CheckInputData(encryptedDataWithMetadata, nameof(encryptedDataWithMetadata));
             ValidateEncryptedDataWithMetadataSize(encryptedDataWithMetadata);
@@ -106,7 +117,7 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
             Array.Copy(encryptedDataWithMetadata, encryptedDataWithTagSize, nonce, 0, _nonceSize);
 
-            var decryptedDataSize = InitCipherAndGetOutputSize(forEncryption: false, nonce, encryptedDataWithTagSize);
+            var decryptedDataSize = InitCipherAndGetOutputSize(forEncryption: false, nonce, associatedData, encryptedDataWithTagSize);
             var decryptedData = new byte[decryptedDataSize];
 
             var length = _gcmBlockCipher.ProcessBytes(encryptedDataWithMetadata, 0, encryptedDataWithTagSize, decryptedData, 0);
@@ -117,17 +128,49 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         }
 
         public string DecryptText(string encryptedTextWithMetadata)
+            => DecryptText(encryptedTextWithMetadata, null);
+
+        public string DecryptText(string encryptedTextWithMetadata, byte[] associatedData)
         {
             CheckInputText(encryptedTextWithMetadata, nameof(encryptedTextWithMetadata));
 
             var encryptedDataWithMetadata = _encoder.Decode(encryptedTextWithMetadata);
-            var decryptedData = DecryptData(encryptedDataWithMetadata);
+            var decryptedData = DecryptData(encryptedDataWithMetadata, associatedData);
             var decryptedText = decryptedData.ToUTF8String();
 
             return decryptedText;
         }
 
         #endregion Decryption
+
+
+        #region Async
+
+        public Task<byte[]> EncryptDataAsync(byte[] data, CancellationToken cancellationToken = default)
+            => EncryptDataAsync(data, null, cancellationToken);
+
+        public Task<byte[]> EncryptDataAsync(byte[] data, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => EncryptData(data, associatedData), cancellationToken);
+
+        public Task<string> EncryptTextAsync(string text, CancellationToken cancellationToken = default)
+            => EncryptTextAsync(text, null, cancellationToken);
+
+        public Task<string> EncryptTextAsync(string text, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => EncryptText(text, associatedData), cancellationToken);
+
+        public Task<byte[]> DecryptDataAsync(byte[] encryptedDataWithMetadata, CancellationToken cancellationToken = default)
+            => DecryptDataAsync(encryptedDataWithMetadata, null, cancellationToken);
+
+        public Task<byte[]> DecryptDataAsync(byte[] encryptedDataWithMetadata, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => DecryptData(encryptedDataWithMetadata, associatedData), cancellationToken);
+
+        public Task<string> DecryptTextAsync(string encryptedTextWithMetadata, CancellationToken cancellationToken = default)
+            => DecryptTextAsync(encryptedTextWithMetadata, null, cancellationToken);
+
+        public Task<string> DecryptTextAsync(string encryptedTextWithMetadata, byte[] associatedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => DecryptText(encryptedTextWithMetadata, associatedData), cancellationToken);
+
+        #endregion Async
 
 
         #region Key set/update
@@ -207,9 +250,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         private byte[] GenerateNonce()
             => CryptographyHelper.GenerateSecureRandomBytes(_nonceSize);
 
-        private int InitCipherAndGetOutputSize(bool forEncryption, byte[] nonce, int inputSize)
+        private int InitCipherAndGetOutputSize(bool forEncryption, byte[] nonce, byte[] associatedData, int inputSize)
         {
-            var aeadParameters = new AeadParameters(new KeyParameter(_key), _tagBitsSize, nonce, null);
+            var aeadParameters = new AeadParameters(new KeyParameter(_key), _tagBitsSize, nonce, associatedData);
 
             _gcmBlockCipher.Init(forEncryption, aeadParameters);
 
