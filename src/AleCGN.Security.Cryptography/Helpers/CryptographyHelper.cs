@@ -22,5 +22,30 @@ namespace AleCGN.Security.Cryptography.Helpers
 
             return randomBytes;
         }
+
+        /// <summary>
+        /// Compares two byte arrays in an amount of time which depends only on their length,
+        /// preventing timing attacks when comparing hashes, MACs or derived keys.
+        /// </summary>
+        public static bool FixedTimeEquals(byte[] left, byte[] right)
+        {
+#if NETSTANDARD2_0
+            if (left is null || right is null || left.Length != right.Length)
+            {
+                return false;
+            }
+
+            var difference = 0;
+
+            for (var i = 0; i < left.Length; i++)
+            {
+                difference |= left[i] ^ right[i];
+            }
+
+            return difference == 0;
+#else
+            return left != null && right != null && CryptographicOperations.FixedTimeEquals(left, right);
+#endif
+        }
     }
 }

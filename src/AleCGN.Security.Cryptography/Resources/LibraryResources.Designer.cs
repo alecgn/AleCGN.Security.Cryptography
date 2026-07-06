@@ -61,24 +61,6 @@ namespace AleCGN.Security.Cryptography.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to ^[a-zA-Z0-9\+\/]*={0,3}$.
-        /// </summary>
-        internal static string RegularExpression_Base64String {
-            get {
-                return ResourceManager.GetString("RegularExpression_Base64String", resourceCulture);
-            }
-        }
-        
-        /// <summary>
-        ///   Looks up a localized string similar to ^(0(?:x|X))?([0-9a-fA-F]+)$.
-        /// </summary>
-        internal static string RegularExpression_HexadecimalString {
-            get {
-                return ResourceManager.GetString("RegularExpression_HexadecimalString", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to Invalid AES key..
         /// </summary>
         internal static string Validation_AESKey {
@@ -156,6 +138,87 @@ namespace AleCGN.Security.Cryptography.Resources {
         internal static string Validation_InvalidHexadecimalString {
             get {
                 return ResourceManager.GetString("Validation_InvalidHexadecimalString", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Parameter &apos;{0}&apos; must be at least 8 bytes long (RFC 8018)..
+        /// </summary>
+        internal static string Validation_Pbkdf2SaltSize {
+            get {
+                return ResourceManager.GetString("Validation_Pbkdf2SaltSize", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Parameter &apos;{0}&apos; is not a valid base32 string..
+        /// </summary>
+        internal static string Validation_InvalidBase32String {
+            get {
+                return ResourceManager.GetString("Validation_InvalidBase32String", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Invalid key (wrong size/length) for the selected algorithm..
+        /// </summary>
+        internal static string Validation_InvalidKey {
+            get {
+                return ResourceManager.GetString("Validation_InvalidKey", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Key not set; when instantiating this class with the constructor without a key, the SetOrUpdateKey(...) method must be called before performing any operation, providing a valid key..
+        /// </summary>
+        internal static string Validation_KeyNotSet {
+            get {
+                return ResourceManager.GetString("Validation_KeyNotSet", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Parameter &apos;{0}&apos; is not a valid password hash string..
+        /// </summary>
+        internal static string Validation_InvalidPasswordHash {
+            get {
+                return ResourceManager.GetString("Validation_InvalidPasswordHash", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to The encrypted payload format is not valid or the data is corrupted..
+        /// </summary>
+        internal static string Validation_InvalidPayloadFormat {
+            get {
+                return ResourceManager.GetString("Validation_InvalidPayloadFormat", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Parameter &apos;{0}&apos; is not a valid PEM-encoded key..
+        /// </summary>
+        internal static string Validation_InvalidPemKey {
+            get {
+                return ResourceManager.GetString("Validation_InvalidPemKey", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Public key not set; provide a PEM-encoded public key in the constructor to perform this operation..
+        /// </summary>
+        internal static string Validation_PublicKeyNotSet {
+            get {
+                return ResourceManager.GetString("Validation_PublicKeyNotSet", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Private key not set; provide a PEM-encoded private key in the constructor to perform this operation..
+        /// </summary>
+        internal static string Validation_PrivateKeyNotSet {
+            get {
+                return ResourceManager.GetString("Validation_PrivateKeyNotSet", resourceCulture);
             }
         }
     }

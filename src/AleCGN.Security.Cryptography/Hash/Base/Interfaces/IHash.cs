@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace AleCGN.Security.Cryptography.Hash
 {
@@ -9,6 +11,14 @@ namespace AleCGN.Security.Cryptography.Hash
         string ComputeTextHash(string text, out byte[] hashBytes, int offset = 0, int count = 0);
 
         string ComputeFileHash(string filePath, out byte[] hashBytes, int bufferSizeInKB = 64, long offset = 0L, long count = 0L);
+
+        Task<FileHashResult> ComputeFileHashAsync(
+            string filePath,
+            int bufferSizeInKB = 64,
+            long offset = 0L,
+            long count = 0L,
+            IProgress<int> progress = null,
+            CancellationToken cancellationToken = default);
 
         bool VerifyHash(byte[] data, byte[] hash, int offset = 0, int count = 0);
 

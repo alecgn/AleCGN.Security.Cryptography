@@ -1,0 +1,111 @@
+using AleCGN.Security.Cryptography.Encoders;
+using AleCGN.Security.Cryptography.Encoders.Extensions;
+using AleCGN.Security.Cryptography.Hash;
+using AleCGN.Security.Cryptography.Helpers;
+using AleCGN.Security.Cryptography.Resources;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Crypto.Encodings;
+using Org.BouncyCastle.Crypto.Engines;
+using System.Security.Cryptography;
+using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
+
+namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Rsa
+{
+    /// <summary>
+    /// RSA encryption with OAEP padding (SHA-256 by default). Suitable for small payloads such as
+    /// symmetric keys; for large data, encrypt with AES-GCM and protect the AES key with this class.
+    /// Keys are provided as PEM-encoded strings (use <see cref="RsaKeyPairHelper"/> to generate them).
+    /// </summary>
+    public class RsaOaepEncryption : IRsaOaepEncryption
+    {
+        private readonly IEncoder _encoder;
+        private readonly HashAlgorithmKind _oaepDigest;
+        private readonly AsymmetricKeyParameter _publicKey;
+        private readonly AsymmetricKeyParameter _privateKey;
+
+        public RsaOaepEncryption(
+            IEncoder encoder,
+            string publicKeyPem = null,
+            string privateKeyPem = null,
+            HashAlgorithmKind oaepDigest = HashAlgorithmKind.SHA256)
+        {
+            _encoder = encoder;
+            _oaepDigest = oaepDigest;
+
+            if (!string.IsNullOrWhiteSpace(publicKeyPem))
+            {
+                _publicKey = PemKeyHelper.ReadPublicKey(publicKeyPem, nameof(publicKeyPem));
+            }
+
+            if (!string.IsNullOrWhiteSpace(privateKeyPem))
+            {
+                _privateKey = PemKeyHelper.ReadPrivateKey(privateKeyPem, nameof(privateKeyPem));
+            }
+        }
+
+        public byte[] EncryptData(byte[] data)
+        {
+            CheckInputData(data, nameof(data));
+
+            if (_publicKey is null)
+            {
+                throw new CryptographicException(LibraryResources.Validation_PublicKeyNotSet);
+            }
+
+            var engine = CreateEngine();
+
+            engine.Init(true, _publicKey);
+
+            return engine.ProcessBlock(data, 0, data.Length);
+        }
+
+        public string EncryptText(string text)
+        {
+            CheckInputText(text, nameof(text));
+
+            return _encoder.Encode(EncryptData(text.ToUTF8Bytes()));
+        }
+
+        public byte[] DecryptData(byte[] encryptedData)
+        {
+            CheckInputData(encryptedData, nameof(encryptedData));
+
+            if (_privateKey is null)
+            {
+                throw new CryptographicException(LibraryResources.Validation_PrivateKeyNotSet);
+            }
+
+            var engine = CreateEngine();
+
+            engine.Init(false, _privateKey);
+
+            return engine.ProcessBlock(encryptedData, 0, encryptedData.Length);
+        }
+
+        public string DecryptText(string encryptedText)
+        {
+            CheckInputText(encryptedText, nameof(encryptedText));
+
+            return DecryptData(_encoder.Decode(encryptedText)).ToUTF8String();
+        }
+
+        private OaepEncoding CreateEngine()
+            => new OaepEncoding(new RsaEngine(), DigestHelper.CreateDigest(_oaepDigest));
+
+        private void CheckInputData(byte[] inputData, string paramName)
+        {
+            if (inputData == null || inputData.Length == 0)
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, paramName);
+            }
+        }
+
+        private void CheckInputText(string inputText, string paramName)
+        {
+            if (string.IsNullOrWhiteSpace(inputText))
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, paramName);
+            }
+        }
+    }
+}

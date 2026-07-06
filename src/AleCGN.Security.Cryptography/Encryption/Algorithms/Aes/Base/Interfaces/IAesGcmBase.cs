@@ -4,6 +4,14 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 {
     public interface IAesGcmBase : IEncryptionOperations, IDisposable
     {
+        byte[] EncryptData(byte[] data, byte[] associatedData);
+
+        string EncryptText(string text, byte[] associatedData);
+
+        byte[] DecryptData(byte[] encryptedDataWithMetadata, byte[] associatedData);
+
+        string DecryptText(string encryptedTextWithMetadata, byte[] associatedData);
+
         void SetOrUpdateKey(byte[] key);
 
         void SetOrUpdateKey(string encodedKey);

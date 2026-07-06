@@ -1,10 +1,11 @@
-﻿#if NETSTANDARD2_0
-
-using AleCGN.Security.Cryptography.Encoders;
+﻿using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
 using AleCGN.Security.Cryptography.Resources;
 using System.Security.Cryptography;
 using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
+#if NET8_0_OR_GREATER
+using System.Runtime.Versioning;
+#endif
 
 namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
 {
@@ -12,6 +13,9 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
     /// This class and its methods are Windows-only, because ProtectedData is a wrapper/binding around native DPAPI (Data Protection API), only available on Windows.
     /// Using this class, you alleviate the difficult problem of explicitly generating, storing and managing a cryptographic key.
     /// </summary>
+#if NET8_0_OR_GREATER
+    [SupportedOSPlatform("windows")]
+#endif
     public class DataProtection : IDataProtection
     {
         #region Fields
@@ -84,6 +88,9 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
         #endregion Public methods
     }
 
+#if NET8_0_OR_GREATER
+    [SupportedOSPlatform("windows")]
+#endif
     public class DataProtectionConfiguration
     {
         public DataProtectionConfiguration(byte[] optionalEntropy, DataProtectionScope scope)
@@ -102,5 +109,3 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
             => new DataProtectionConfiguration(optionalEntropy: null, DataProtectionScope.LocalMachine);
     }
 }
-
-#endif
