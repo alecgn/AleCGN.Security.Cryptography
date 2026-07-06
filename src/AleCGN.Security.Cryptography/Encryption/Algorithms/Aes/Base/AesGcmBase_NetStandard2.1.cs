@@ -1,9 +1,8 @@
-﻿#if NETSTANDARD2_1
+#if !NETSTANDARD2_0
 
 using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
 using AleCGN.Security.Cryptography.Encryption.Algorithms.Aes.Helpers;
-using AleCGN.Security.Cryptography.Helpers;
 using AleCGN.Security.Cryptography.Resources;
 using System;
 using System.Security.Cryptography;
@@ -22,46 +21,36 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         private readonly AesKeySizes _aesKeySize;
         private AesGcm _aesGcm;
         private byte[] _key;
+        private bool _disposed;
 
         #endregion Fields
 
 
-        #region Constructors/destructors
+        #region Constructors
 
         public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder)
         {
             _aesKeySize = aesKeySize;
             _encoder = encoder;
         }
-        
+
         public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder, byte[] key)
         {
             _aesKeySize = aesKeySize;
             _encoder = encoder;
-            _key = key;
 
-            ValidateAESKey();
-
-            _aesGcm = new AesGcm(_key);
+            SetOrUpdateKey(key);
         }
 
         public AesGcmBase(AesKeySizes aesKeySize, IEncoder encoder, string encodedKey)
         {
             _aesKeySize = aesKeySize;
             _encoder = encoder;
-            _key = _encoder.Decode(encodedKey);
 
-            ValidateAESKey();
-
-            _aesGcm = new AesGcm(_key);
+            SetOrUpdateKey(encodedKey);
         }
 
-        ~AesGcmBase()
-        {
-            _aesGcm?.Dispose();
-        }
-
-        #endregion Constructors/destructors
+        #endregion Constructors
 
 
         #region Public methods
@@ -71,14 +60,18 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         public byte[] EncryptData(byte[] data)
         {
             CheckInputData(data, nameof(data));
+            CheckKeySet();
 
-            var nonce = GenerateNonce();
-            var tag = new byte[_tagSize];
-            var encryptedData = new byte[data.Length];
+            // Output layout: ciphertext || tag || nonce. Encrypting directly into
+            // slices of the final buffer avoids intermediate arrays and copies.
+            var encryptedDataWithMetadata = new byte[data.Length + _tagSize + _nonceSize];
+            var ciphertext = encryptedDataWithMetadata.AsSpan(0, data.Length);
+            var tag = encryptedDataWithMetadata.AsSpan(data.Length, _tagSize);
+            var nonce = encryptedDataWithMetadata.AsSpan(data.Length + _tagSize, _nonceSize);
 
-            EncryptDataInternal(data, tag, nonce, encryptedData);
+            RandomNumberGenerator.Fill(nonce);
 
-            var encryptedDataWithMetadata = GetEncryptedDataWithMetadata(encryptedData, tag, nonce);
+            _aesGcm.Encrypt(nonce, data, ciphertext, tag);
 
             return encryptedDataWithMetadata;
         }
@@ -101,11 +94,16 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         public byte[] DecryptData(byte[] encryptedDataWithMetadata)
         {
             CheckInputData(encryptedDataWithMetadata, nameof(encryptedDataWithMetadata));
+            ValidateEncryptedDataWithMetadataSize(encryptedDataWithMetadata);
+            CheckKeySet();
 
-            var (encryptedData, tag, nonce) = GetMetadataFromEncryptedData(encryptedDataWithMetadata);
-            var decryptedData = new byte[encryptedData.Length];
+            var ciphertextLength = encryptedDataWithMetadata.Length - _tagSize - _nonceSize;
+            var ciphertext = encryptedDataWithMetadata.AsSpan(0, ciphertextLength);
+            var tag = encryptedDataWithMetadata.AsSpan(ciphertextLength, _tagSize);
+            var nonce = encryptedDataWithMetadata.AsSpan(ciphertextLength + _tagSize, _nonceSize);
+            var decryptedData = new byte[ciphertextLength];
 
-            DecryptDataInternal(encryptedData, tag, nonce, decryptedData);
+            _aesGcm.Decrypt(nonce, ciphertext, tag, decryptedData);
 
             return decryptedData;
         }
@@ -128,94 +126,53 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
         public void SetOrUpdateKey(byte[] key)
         {
-            _key = key;
+            AesHelper.ValidateAESKey(key, _aesKeySize);
 
-            ValidateAESKey();
-            CreateNewAesGcmInstance();
+            // Defensive copy: mutations to the caller's array must not affect the key in use.
+            var newKey = (byte[])key.Clone();
+
+            ReplaceKey(newKey);
         }
 
         public void SetOrUpdateKey(string encodedKey)
         {
-            _key = _encoder.Decode(encodedKey);
+            var newKey = _encoder.Decode(encodedKey);
 
-            ValidateAESKey();
-            CreateNewAesGcmInstance();
+            AesHelper.ValidateAESKey(newKey, _aesKeySize);
+
+            ReplaceKey(newKey);
         }
 
         #endregion Key set/update
 
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _aesGcm?.Dispose();
+            _aesGcm = null;
+
+            ClearKey();
+
+            _disposed = true;
+        }
 
         #endregion Public methods
 
 
         #region Private methods
 
-        private void ValidateAESKey()
-            => AesHelper.ValidateAESKey(_key, _aesKeySize);
-
         private void CheckInputData(byte[] inputData, string paramName)
         {
-            if (inputData == null || inputData.Length <= 0)
+            if (inputData == null || inputData.Length == 0)
             {
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, paramName);
             }
         }
-
-        private byte[] GenerateNonce()
-            => CryptographyHelper.GenerateSecureRandomBytes(_nonceSize);
-
-        private void EncryptDataInternal(byte[] data, byte[] tag, byte[] nonce, byte[] encryptedData)
-        {
-            if (_key == null || _key.Length == 0)
-            {
-                throw new CryptographicException(LibraryResources.Validation_AESKeyNotSet);
-            }
-
-            _aesGcm.Encrypt(
-                nonce,
-                data,
-                encryptedData,
-                tag
-            );
-        }
-
-        private byte[] GetEncryptedDataWithMetadata(
-            byte[] encryptedData,
-            byte[] tag,
-            byte[] nonce)
-        {
-            var encryptedDataWithMetadataSize = GetEncryptedDataWithMetadataSize(encryptedData.Length);
-            var encryptedDataWithMetada = new byte[encryptedDataWithMetadataSize];
-
-            Array.Copy(
-                encryptedData,
-                0,
-                encryptedDataWithMetada,
-                0,
-                encryptedData.Length
-            );
-
-            Array.Copy(
-                tag,
-                0,
-                encryptedDataWithMetada,
-                encryptedData.Length,
-                _tagSize
-            );
-
-            Array.Copy(
-                nonce,
-                0,
-                encryptedDataWithMetada,
-                encryptedData.Length + _tagSize,
-                _nonceSize
-            );
-
-            return encryptedDataWithMetada;
-        }
-
-        private int GetEncryptedDataWithMetadataSize(int encryptedDataSize)
-            => encryptedDataSize + _tagSize + _nonceSize;
 
         private void CheckInputText(string inputText, string paramName)
         {
@@ -225,72 +182,45 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
             }
         }
 
-        private (byte[] EncryptedData, byte[] Tag, byte[] Nonce) GetMetadataFromEncryptedData(byte[] encrypteDataWithMetada)
-        {
-            ValidateEncryptedDataWithMetadataSize(encrypteDataWithMetada);
-
-            var encryptedData = new byte[encrypteDataWithMetada.Length - _nonceSize - _tagSize];
-
-            Array.Copy(
-                encrypteDataWithMetada,
-                0,
-                encryptedData,
-                0,
-                encryptedData.Length
-            );
-
-            var tag = new byte[_tagSize];
-
-            Array.Copy(
-                encrypteDataWithMetada,
-                encryptedData.Length,
-                tag,
-                0,
-                _tagSize
-            );
-
-            var nonce = new byte[_nonceSize];
-
-            Array.Copy(
-                encrypteDataWithMetada,
-                encryptedData.Length + _tagSize,
-                nonce,
-                0,
-                _nonceSize
-            );
-
-            return (EncryptedData: encryptedData, Tag: tag, Nonce: nonce);
-        }
-
-        private void ValidateEncryptedDataWithMetadataSize(byte[] encryptedDataWithMetada)
-        {
-            if (encryptedDataWithMetada is null ||
-                encryptedDataWithMetada.Length < _nonceSize + _tagSize + _encryptedDataMinimumSize)
-            {
-                ThrowFormattedArgumentException(LibraryResources.Validation_EncryptedDataSize, nameof(encryptedDataWithMetada));
-            }
-        }
-
-        private void DecryptDataInternal(byte[] encryptedDataToDecrypt, byte[] tag, byte[] nonce, byte[] decryptedData)
+        private void CheckKeySet()
         {
             if (_key == null || _key.Length == 0)
             {
                 throw new CryptographicException(LibraryResources.Validation_AESKeyNotSet);
             }
-
-            _aesGcm.Decrypt(
-                nonce,
-                encryptedDataToDecrypt,
-                tag,
-                decryptedData
-            );
         }
 
-        private void CreateNewAesGcmInstance()
+        private void ValidateEncryptedDataWithMetadataSize(byte[] encryptedDataWithMetadata)
+        {
+            if (encryptedDataWithMetadata is null ||
+                encryptedDataWithMetadata.Length < _nonceSize + _tagSize + _encryptedDataMinimumSize)
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_EncryptedDataSize, nameof(encryptedDataWithMetadata));
+            }
+        }
+
+        private void ReplaceKey(byte[] newKey)
         {
             _aesGcm?.Dispose();
-            _aesGcm = null;
+
+            ClearKey();
+
+            _key = newKey;
+#if NET8_0_OR_GREATER
+            _aesGcm = new AesGcm(_key, _tagSize);
+#else
             _aesGcm = new AesGcm(_key);
+#endif
+        }
+
+        private void ClearKey()
+        {
+            if (_key != null)
+            {
+                CryptographicOperations.ZeroMemory(_key);
+
+                _key = null;
+            }
         }
 
         #endregion Private methods

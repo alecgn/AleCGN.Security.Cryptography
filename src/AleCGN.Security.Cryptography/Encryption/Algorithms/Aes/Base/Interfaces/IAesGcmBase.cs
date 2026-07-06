@@ -1,6 +1,8 @@
-﻿namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
+using System;
+
+namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 {
-    public interface IAesGcmBase : IEncryptionOperations
+    public interface IAesGcmBase : IEncryptionOperations, IDisposable
     {
         void SetOrUpdateKey(byte[] key);
 

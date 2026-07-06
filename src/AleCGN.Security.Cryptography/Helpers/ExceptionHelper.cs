@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace AleCGN.Security.Cryptography.Helpers
 {
@@ -6,7 +6,12 @@ namespace AleCGN.Security.Cryptography.Helpers
     {
         internal static void ThrowFormattedArgumentException(string formatedMessage, string paramName)
         {
-            throw new ArgumentException(string.Format(formatedMessage, paramName), paramName);
+            throw CreateFormattedArgumentException(formatedMessage, paramName);
+        }
+
+        internal static ArgumentException CreateFormattedArgumentException(string formatedMessage, string paramName)
+        {
+            return new ArgumentException(string.Format(formatedMessage, paramName), paramName);
         }
     }
 }

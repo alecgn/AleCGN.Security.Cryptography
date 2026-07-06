@@ -1,10 +1,9 @@
-﻿using AleCGN.Security.Cryptography.Constants;
+using AleCGN.Security.Cryptography.Constants;
 using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
 using AleCGN.Security.Cryptography.Resources;
 using System;
 using System.IO;
-using System.Security.Authentication;
 using System.Security.Cryptography;
 using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
 
@@ -15,14 +14,12 @@ namespace AleCGN.Security.Cryptography.Hash
         public event EventHandler<int> OnComputeFileHashProgressChanged;
 
         private readonly IEncoder _encoder;
-        private readonly HashAlgorithm _hashAlgorithm;
-        private readonly HashAlgorithmType _hashAlgorithmType;
+        private readonly HashAlgorithmKind _hashAlgorithmKind;
 
-        public HashBase(IEncoder encoder, HashAlgorithmType hashAlgorithmType)
+        protected HashBase(IEncoder encoder, HashAlgorithmKind hashAlgorithmKind)
         {
             _encoder = encoder;
-            _hashAlgorithmType = hashAlgorithmType;
-            _hashAlgorithm = HashAlgorithm.Create(_hashAlgorithmType.ToString());
+            _hashAlgorithmKind = hashAlgorithmKind;
         }
 
         /// <summary>
@@ -31,7 +28,7 @@ namespace AleCGN.Security.Cryptography.Hash
         /// <param name="data">The source data to be computed the hash.</param>
         /// <param name="hashBytes">The computed hash as out raw bytes.</param>
         /// <param name="offset">The offset to start taking data to be computed the hash.</param>
-        /// <param name="count">The ammount of data to be computed the hash.</param>
+        /// <param name="count">The ammount of data to be computed the hash (0 = all remaining data after offset).</param>
         /// <returns></returns>
         public string ComputeHash(byte[] data, out byte[] hashBytes, int offset = 0, int count = 0)
         {
@@ -40,7 +37,10 @@ namespace AleCGN.Security.Cryptography.Hash
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, nameof(data));
             }
 
-            hashBytes = _hashAlgorithm.ComputeHash(buffer: data, offset: offset, count: (count == 0 ? data.Length : count));
+            using (var hashAlgorithm = CreateHashAlgorithm())
+            {
+                hashBytes = hashAlgorithm.ComputeHash(buffer: data, offset: offset, count: (count == 0 ? data.Length - offset : count));
+            }
 
             return _encoder.Encode(hashBytes);
         }
@@ -52,46 +52,51 @@ namespace AleCGN.Security.Cryptography.Hash
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(text));
             }
 
-            var textSubstring = text.Substring(startIndex: offset, length: (count == 0 ? text.Length : count));
+            var textSubstring = text.Substring(startIndex: offset, length: (count == 0 ? text.Length - offset : count));
             var textSubstringBytes = textSubstring.ToUTF8Bytes();
-            var hash = ComputeHash(textSubstringBytes, out hashBytes);
-            
-            return hash;
+
+            return ComputeHash(textSubstringBytes, out hashBytes);
         }
 
-        public string ComputeFileHash(string filePath, out byte[] hashBytes, int bufferSizeInKB = 4, long offset = 0L, long count = 0L)
+        public string ComputeFileHash(string filePath, out byte[] hashBytes, int bufferSizeInKB = 64, long offset = 0L, long count = 0L)
         {
             if (!File.Exists(filePath))
             {
                 throw new FileNotFoundException(LibraryResources.Validation_FileNotFound, filePath);
             }
 
-            using (var fStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.None))
-            {
-                count = (count == 0 ? fStream.Length : count);
-                fStream.Seek(offset, SeekOrigin.Begin);
-                //var buffer = new byte[10];
-                var buffer = new byte[bufferSizeInKB * ConstantValues.BytesPerKilobyte];
-                var amount = (count - offset);
+            var buffer = new byte[bufferSizeInKB * ConstantValues.BytesPerKilobyte];
 
+            using (var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, buffer.Length, FileOptions.SequentialScan))
+            using (var hashAlgorithm = CreateHashAlgorithm())
+            {
+                fileStream.Seek(offset, SeekOrigin.Begin);
+
+                var total = (count == 0 ? fileStream.Length - offset : count);
+                var remaining = total;
                 var percentageDone = 0;
 
-                while (amount > 0)
+                while (remaining > 0)
                 {
-                    var bytesRead = fStream.Read(buffer, 0, (int)Math.Min(buffer.Length, amount));
+                    var bytesRead = fileStream.Read(buffer, 0, (int)Math.Min(buffer.Length, remaining));
 
-                    amount -= bytesRead;
-
-                    if (amount > 0)
+                    if (bytesRead == 0)
                     {
-                        _hashAlgorithm.TransformBlock(buffer, 0, bytesRead, buffer, 0);
+                        break;
+                    }
+
+                    remaining -= bytesRead;
+
+                    if (remaining > 0)
+                    {
+                        hashAlgorithm.TransformBlock(buffer, 0, bytesRead, null, 0);
                     }
                     else
                     {
-                        _hashAlgorithm.TransformFinalBlock(buffer, 0, bytesRead);
+                        hashAlgorithm.TransformFinalBlock(buffer, 0, bytesRead);
                     }
 
-                    var tmpPercentageDone = (int)(fStream.Position * 100 / count);
+                    var tmpPercentageDone = (int)((total - remaining) * 100 / total);
 
                     if (tmpPercentageDone != percentageDone)
                     {
@@ -100,34 +105,110 @@ namespace AleCGN.Security.Cryptography.Hash
                         OnComputeFileHashProgressChanged?.Invoke(this, percentageDone);
                     }
                 }
+
+                if (remaining > 0 || total == 0)
+                {
+                    hashAlgorithm.TransformFinalBlock(buffer, 0, 0);
+                }
+
+                hashBytes = hashAlgorithm.Hash;
             }
 
-            hashBytes = _hashAlgorithm.Hash;
-
-            return _encoder.Encode(_hashAlgorithm.Hash);
+            return _encoder.Encode(hashBytes);
         }
 
-        public string VerifyHash(byte[] data, byte[] hash, int offset = 0, int count = 0)
+        public bool VerifyHash(byte[] data, byte[] hash, int offset = 0, int count = 0)
         {
-            throw new System.NotImplementedException();
+            if (hash is null || hash.Length == 0)
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, nameof(hash));
+            }
+
+            ComputeHash(data, out var computedHashBytes, offset, count);
+
+            return FixedTimeEquals(computedHashBytes, hash);
         }
 
-        public string VerifyTextHash(string text, string hash, int offset = 0, int count = 0)
+        public bool VerifyTextHash(string text, string hash, int offset = 0, int count = 0)
         {
-            throw new System.NotImplementedException();
+            if (string.IsNullOrWhiteSpace(hash))
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(hash));
+            }
+
+            ComputeTextHash(text, out var computedHashBytes, offset, count);
+
+            return FixedTimeEquals(computedHashBytes, _encoder.Decode(hash));
         }
 
-        public string VerifyFileHash(string filePath, byte[] hash, long offset = 0, long count = 0)
+        public bool VerifyFileHash(string filePath, byte[] hash, long offset = 0L, long count = 0L)
         {
-            throw new System.NotImplementedException();
+            if (hash is null || hash.Length == 0)
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, nameof(hash));
+            }
+
+            ComputeFileHash(filePath, out var computedHashBytes, offset: offset, count: count);
+
+            return FixedTimeEquals(computedHashBytes, hash);
         }
 
-        public string VerifyFileHash(string filePath, string hash, long offset = 0, long count = 0)
+        public bool VerifyFileHash(string filePath, string hash, long offset = 0L, long count = 0L)
         {
-            throw new System.NotImplementedException();
+            if (string.IsNullOrWhiteSpace(hash))
+            {
+                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(hash));
+            }
+
+            ComputeFileHash(filePath, out var computedHashBytes, offset: offset, count: count);
+
+            return FixedTimeEquals(computedHashBytes, _encoder.Decode(hash));
         }
 
-        public void Dispose() =>
-            _hashAlgorithm?.Dispose();
+        public void Dispose()
+        {
+            // Kept for backwards compatibility: hash algorithm instances are created
+            // and disposed per operation, so there is no shared state to release.
+        }
+
+        private HashAlgorithm CreateHashAlgorithm()
+        {
+            switch (_hashAlgorithmKind)
+            {
+                case HashAlgorithmKind.MD5:
+                    return System.Security.Cryptography.MD5.Create();
+                case HashAlgorithmKind.SHA1:
+                    return System.Security.Cryptography.SHA1.Create();
+                case HashAlgorithmKind.SHA256:
+                    return System.Security.Cryptography.SHA256.Create();
+                case HashAlgorithmKind.SHA384:
+                    return System.Security.Cryptography.SHA384.Create();
+                case HashAlgorithmKind.SHA512:
+                    return System.Security.Cryptography.SHA512.Create();
+                default:
+                    throw new CryptographicException($"Unsupported hash algorithm: {_hashAlgorithmKind}.");
+            }
+        }
+
+        private static bool FixedTimeEquals(byte[] left, byte[] right)
+        {
+#if NETSTANDARD2_0
+            if (left is null || right is null || left.Length != right.Length)
+            {
+                return false;
+            }
+
+            var difference = 0;
+
+            for (var i = 0; i < left.Length; i++)
+            {
+                difference |= left[i] ^ right[i];
+            }
+
+            return difference == 0;
+#else
+            return left != null && right != null && CryptographicOperations.FixedTimeEquals(left, right);
+#endif
+        }
     }
 }
