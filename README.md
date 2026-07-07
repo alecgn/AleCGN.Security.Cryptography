@@ -41,9 +41,9 @@ dotnet add package AleCGN.Security.Cryptography.DependencyInjection   # optional
 
 ## Supported frameworks and backends
 
-The library multi-targets `netstandard2.0`, `netstandard2.1` and `net8.0`. Consumers automatically get the best implementation available for their runtime:
+The library multi-targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net10.0`. Consumers automatically get the best implementation available for their runtime — .NET 10 applications load a dedicated `net10.0` build (same modern code paths as `net8.0`, compiled and validated against the .NET 10 runtime):
 
-| Feature            | netstandard2.0 (.NET Framework 4.6.1+, .NET Core 2.x) | netstandard2.1 (.NET Core 3.x, Mono, Xamarin)                    | net8.0+                                      |
+| Feature            | netstandard2.0 (.NET Framework 4.6.1+, .NET Core 2.x) | netstandard2.1 (.NET Core 3.x, Mono, Xamarin)                    | net8.0 / net10.0                             |
 | ------------------ | ----------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------- |
 | AES-GCM            | BouncyCastle`GcmBlockCipher`                        | Native`System.Security.Cryptography.AesGcm` (spans, zero-copy) | Native`AesGcm` (hardware intrinsics)       |
 | ChaCha20-Poly1305  | BouncyCastle                                          | BouncyCastle                                                     | BouncyCastle                                 |
@@ -672,7 +672,7 @@ bool equal = CryptographyHelper.FixedTimeEquals(mac1, mac2);        // timing-at
 
 ## Dependency injection
 
-Package: `AleCGN.Security.Cryptography.DependencyInjection` (targets `netstandard2.0` and `net8.0`)
+Package: `AleCGN.Security.Cryptography.DependencyInjection` (targets `netstandard2.0`, `net8.0` and `net10.0`)
 
 One call registers everything as singletons:
 
@@ -838,7 +838,7 @@ dotnet build src/AleCGN.Security.Cryptography/AleCGN.Security.Cryptography.cspro
 dotnet test  tests/AleCGN.Security.Cryptography.Tests/AleCGN.Security.Cryptography.Tests.csproj -c Release
 ```
 
-The test suite (xUnit, 218 tests per framework) validates the implementations against official test vectors — RFC 4231/2202 (HMAC), RFC 5869 (HKDF), RFC 6070 (PBKDF2), RFC 4648 (Base32/Base64Url), FIPS 180-2 (SHA family) — plus roundtrip, tampering, truncation, misuse, async-parity and cancellation checks. It multi-targets `net8.0` **and** `net48`, so both the native and the netstandard2.0/BouncyCastle backends are exercised on every run (436 test executions in total).
+The test suite (xUnit, 221 tests per framework) validates the implementations against official test vectors — RFC 4231/2202 (HMAC), RFC 5869 (HKDF), RFC 6070 (PBKDF2), RFC 4648 (Base32/Base64Url), FIPS 180-2 (SHA family) — plus roundtrip, tampering, truncation, misuse, async-parity and cancellation checks. It multi-targets `net8.0`, `net10.0` **and** `net48`, so the native code paths are exercised on both modern runtimes and the netstandard2.0/BouncyCastle backend on .NET Framework, on every run (663 test executions in total).
 
 CI/CD (GitHub Actions, [.github/workflows/ci-cd.yml](.github/workflows/ci-cd.yml)): every push and pull request builds all target frameworks and runs the full test suite on both TFMs; pushes to `main`/`master` that pass additionally pack both NuGet packages and publish them to NuGet.org (requires the `NUGET_API_KEY` repository secret; already-published versions are skipped). The .NET 8 sample remains available as a runnable functional walkthrough.
 
