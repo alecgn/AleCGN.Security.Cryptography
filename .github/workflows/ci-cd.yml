@@ -69,7 +69,15 @@ jobs:
       - name: Push packages to NuGet.org
         # --skip-duplicate: pushing an already-published version is not an error,
         # so pushes that don't bump <Version> won't fail the pipeline.
-        run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source ${{ env.NUGET_SOURCE }} --skip-duplicate
+        #run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source ${{ env.NUGET_SOURCE }} --skip-duplicate
+        shell: pwsh
+        run: |
+          Get-ChildItem artifacts -Filter *.nupkg | ForEach-Object {
+            dotnet nuget push $_.FullName `
+              --api-key "${{ secrets.NUGET_API_KEY }}" `
+              --source "${{ env.NUGET_SOURCE }}" `
+              --skip-duplicate
+          }
 
       - name: Upload packages as build artifacts
         uses: actions/upload-artifact@v4
