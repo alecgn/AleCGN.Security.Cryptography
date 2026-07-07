@@ -26,6 +26,17 @@ namespace AleCGN.Security.Cryptography.Tests.Encryption
         }
 
         [Fact]
+        public void EncryptText_ProducesSelfDescribingFormat()
+        {
+            var pbe = Create();
+            var encrypted = pbe.EncryptText("secret", "password");
+
+            // $pbe-aes256-gcm$v=1$pbkdf2-sha256,i=1000$<salt>$<nonce>$<tag>$<ciphertext>
+            Assert.StartsWith("$pbe-aes256-gcm$v=1$pbkdf2-sha256,i=1000$", encrypted);
+            Assert.Equal(8, encrypted.Split('$').Length);
+        }
+
+        [Fact]
         public void Decrypt_WrongPassword_Fails()
         {
             var pbe = Create();

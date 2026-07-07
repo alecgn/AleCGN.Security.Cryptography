@@ -46,22 +46,39 @@ namespace AleCGN.Security.Cryptography.Tests.Encryption
                 var encrypted = aes.EncryptData(data);
 
                 Assert.Equal(data, aes.DecryptData(encrypted));
-                // payload layout: ciphertext || tag(16) || nonce(12)
-                Assert.Equal(data.Length + 28, encrypted.Length);
+                // self-describing envelope: header(7) + 3 field prefixes(12) + nonce(12) + tag(16) + ciphertext
+                Assert.Equal(data.Length + 47, encrypted.Length);
+                Assert.Equal((byte)'A', encrypted[0]); // "ACGN" magic
             }
         }
 
         [Theory]
-        [InlineData(128)]
-        [InlineData(192)]
-        [InlineData(256)]
-        public void EncryptDecrypt_Text_Roundtrip(int keySizeBits)
+        [InlineData(128, "$aes128-gcm$v=1$")]
+        [InlineData(192, "$aes192-gcm$v=1$")]
+        [InlineData(256, "$aes256-gcm$v=1$")]
+        public void EncryptDecrypt_Text_Roundtrip_SelfDescribingFormat(int keySizeBits, string expectedPrefix)
         {
             using (var aes = Create(keySizeBits, GenerateKey(keySizeBits)))
             {
                 var encrypted = aes.EncryptText("sensitive text");
 
+                // $<algorithm>$v=1$<nonce>$<tag>$<ciphertext> — 6 '$'-separated parts
+                Assert.StartsWith(expectedPrefix, encrypted);
+                Assert.Equal(6, encrypted.Split('$').Length);
                 Assert.Equal("sensitive text", aes.DecryptText(encrypted));
+            }
+        }
+
+        [Fact]
+        public void DecryptText_WrongAlgorithmEnvelope_Throws()
+        {
+            using (var aes128 = Create(128, GenerateKey(128)))
+            using (var aes256 = Create(256, GenerateKey(256)))
+            {
+                var payload = aes128.EncryptText("data");
+
+                // A payload produced by another algorithm is rejected by format, not by garbled output
+                Assert.Throws<ArgumentException>(() => aes256.DecryptText(payload));
             }
         }
 

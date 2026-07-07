@@ -164,10 +164,11 @@ namespace ConsoleApp_Net8
                 var encryptedText = chaCha.EncryptText("chacha secret", "context"u8.ToArray());
 
                 Check("ChaCha20-Poly1305 roundtrip", chaCha.DecryptText(encryptedText, "context"u8.ToArray()) == "chacha secret");
+                Check("ChaCha20-Poly1305 self-describing format", encryptedText.StartsWith("$chacha20-poly1305$v=1$"));
                 Check("ChaCha20-Poly1305 wrong AAD rejected", Throws(() => chaCha.DecryptText(encryptedText, "other"u8.ToArray())));
 
-                var tampered = base64Encoder.Decode(encryptedText);
-                tampered[0] ^= 0xFF;
+                var tampered = chaCha.EncryptData("chacha secret"u8.ToArray(), "context"u8.ToArray());
+                tampered[tampered.Length - 1] ^= 0xFF;
 
                 Check("ChaCha20-Poly1305 tampering rejected", Throws(() => chaCha.DecryptData(tampered, "context"u8.ToArray())));
             }

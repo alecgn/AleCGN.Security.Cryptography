@@ -1,9 +1,11 @@
 using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
 using AleCGN.Security.Cryptography.Encryption.Algorithms.Aes;
+using AleCGN.Security.Cryptography.Helpers;
 using AleCGN.Security.Cryptography.KeyDerivation;
 using AleCGN.Security.Cryptography.Resources;
 using System;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
@@ -12,16 +14,18 @@ namespace AleCGN.Security.Cryptography.Encryption.PasswordBased
 {
     /// <summary>
     /// Password-based encryption combining PBKDF2 key derivation with AES-GCM-256.
-    /// The output payload is self-contained: a header with the KDF parameters and salt is prepended
-    /// to the AES-GCM output, and is also used as associated data, so tampering with the parameters
-    /// causes decryption to fail. Data encrypted with older configurations remains decryptable.
+    /// Payloads are self-describing (algorithm, KDF parameters and salt are explicit fields — see
+    /// PayloadFormat): "$pbe-aes256-gcm$v=1$pbkdf2-sha256,i=600000$&lt;salt&gt;$&lt;nonce&gt;$&lt;tag&gt;$&lt;ciphertext&gt;".
+    /// The KDF parameters and salt are bound as associated data, so tampering with them causes
+    /// decryption to fail, and data encrypted with older configurations remains decryptable.
     /// </summary>
     public class PasswordBasedEncryption : IPasswordBasedEncryption
     {
-        // Header layout: version (1) | PRF (1) | iterations (4, little-endian) | salt size (1) | salt.
-        private const byte _formatVersion = 1;
-        private const int _headerFixedSize = 7;
+        private const int _fieldCount = 5;        // kdf parameters | salt | nonce | tag | ciphertext
+        private const int _kdfFieldSize = 5;      // prf(1) + iterations(4, little-endian)
         private const int _derivedKeySize = 32;
+        private const string _pbkdf2ParameterPrefix = "pbkdf2-";
+        private const string _iterationsParameterPrefix = "i=";
 
         private readonly IEncoder _encoder;
         private readonly Pbkdf2Configuration _configuration;
@@ -35,15 +39,11 @@ namespace AleCGN.Security.Cryptography.Encryption.PasswordBased
                 throw new ArgumentNullException(nameof(configuration));
             }
 
-            // The salt size is stored in a single header byte.
-            if (configuration.SaltSize > byte.MaxValue)
-            {
-                ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentOutOfRange, nameof(configuration));
-            }
-
             _encoder = encoder;
             _configuration = configuration;
         }
+
+        #region Public methods
 
         public byte[] EncryptData(byte[] data, string password)
         {
@@ -54,24 +54,29 @@ namespace AleCGN.Security.Cryptography.Encryption.PasswordBased
 
             CheckPassword(password);
 
-            var encryptionConfiguration = new Pbkdf2Configuration(
-                _configuration.PseudoRandomFunction, _configuration.Iterations, _configuration.SaltSize, _derivedKeySize);
-            var pbkdf2 = new Pbkdf2(_encoder, encryptionConfiguration);
+            var pbkdf2 = new Pbkdf2(_encoder, new Pbkdf2Configuration(
+                _configuration.PseudoRandomFunction, _configuration.Iterations, _configuration.SaltSize, _derivedKeySize));
             var derivedKey = pbkdf2.DeriveKey(password.ToUTF8Bytes(), out var salt);
 
             try
             {
-                var header = BuildHeader(salt);
+                var associatedData = BuildAssociatedData(_configuration.PseudoRandomFunction, _configuration.Iterations, salt);
 
                 using (var aesGcm256 = new AesGcm256(_encoder, derivedKey))
                 {
-                    var encryptedData = aesGcm256.EncryptData(data, associatedData: header);
-                    var payload = new byte[header.Length + encryptedData.Length];
+                    var aesPayload = aesGcm256.EncryptData(data, associatedData);
+                    var aesFields = PayloadFormat.GetFields(
+                        aesPayload,
+                        PayloadFormat.ParseBinary(aesPayload, PayloadAlgorithms.Aes256Gcm, 3, nameof(data)));
 
-                    Array.Copy(header, 0, payload, 0, header.Length);
-                    Array.Copy(encryptedData, 0, payload, header.Length, encryptedData.Length);
-
-                    return payload;
+                    return PayloadFormat.BuildBinary(
+                        PayloadAlgorithms.PasswordBasedAes256Gcm,
+                        BuildKdfField(_configuration.PseudoRandomFunction, _configuration.Iterations),
+                        salt,
+                        aesFields[0],   // nonce
+                        aesFields[1],   // tag
+                        aesFields[2]    // ciphertext
+                    );
                 }
             }
             finally
@@ -87,7 +92,27 @@ namespace AleCGN.Security.Cryptography.Encryption.PasswordBased
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(text));
             }
 
-            return _encoder.Encode(EncryptData(text.ToUTF8Bytes(), password));
+            var payload = EncryptData(text.ToUTF8Bytes(), password);
+            var fields = PayloadFormat.GetFields(
+                payload,
+                PayloadFormat.ParseBinary(payload, PayloadAlgorithms.PasswordBasedAes256Gcm, _fieldCount, nameof(text)));
+
+            var parameters = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}{1},{2}{3}",
+                _pbkdf2ParameterPrefix,
+                GetPrfToken(_configuration.PseudoRandomFunction),
+                _iterationsParameterPrefix,
+                _configuration.Iterations);
+
+            return PayloadFormat.BuildString(
+                PayloadAlgorithms.PasswordBasedAes256GcmName,
+                parameters,
+                fields[1],  // salt
+                fields[2],  // nonce
+                fields[3],  // tag
+                fields[4]   // ciphertext
+            );
         }
 
         public byte[] DecryptData(byte[] encryptedDataWithMetadata, string password)
@@ -99,30 +124,15 @@ namespace AleCGN.Security.Cryptography.Encryption.PasswordBased
 
             CheckPassword(password);
 
-            var (pseudoRandomFunction, iterations, salt, headerSize) = ParseHeader(encryptedDataWithMetadata);
+            var fields = PayloadFormat.GetFields(
+                encryptedDataWithMetadata,
+                PayloadFormat.ParseBinary(
+                    encryptedDataWithMetadata, PayloadAlgorithms.PasswordBasedAes256Gcm, _fieldCount, nameof(encryptedDataWithMetadata)));
 
-            var pbkdf2 = new Pbkdf2(_encoder, GetKeyDerivationConfiguration(pseudoRandomFunction, iterations));
-            var derivedKey = pbkdf2.DeriveKey(password.ToUTF8Bytes(), salt);
+            var (pseudoRandomFunction, iterations) = ParseKdfField(fields[0], nameof(encryptedDataWithMetadata));
 
-            try
-            {
-                var header = new byte[headerSize];
-
-                Array.Copy(encryptedDataWithMetadata, 0, header, 0, headerSize);
-
-                var encryptedData = new byte[encryptedDataWithMetadata.Length - headerSize];
-
-                Array.Copy(encryptedDataWithMetadata, headerSize, encryptedData, 0, encryptedData.Length);
-
-                using (var aesGcm256 = new AesGcm256(_encoder, derivedKey))
-                {
-                    return aesGcm256.DecryptData(encryptedData, associatedData: header);
-                }
-            }
-            finally
-            {
-                Array.Clear(derivedKey, 0, derivedKey.Length);
-            }
+            return DecryptCore(pseudoRandomFunction, iterations, fields[1], fields[2], fields[3], fields[4], password,
+                nameof(encryptedDataWithMetadata));
         }
 
         public string DecryptText(string encryptedTextWithMetadata, string password)
@@ -132,7 +142,16 @@ namespace AleCGN.Security.Cryptography.Encryption.PasswordBased
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(encryptedTextWithMetadata));
             }
 
-            return DecryptData(_encoder.Decode(encryptedTextWithMetadata), password).ToUTF8String();
+            CheckPassword(password);
+
+            var (parameters, fields) = PayloadFormat.ParseString(
+                encryptedTextWithMetadata, PayloadAlgorithms.PasswordBasedAes256GcmName, _fieldCount - 1,
+                hasParameters: true, nameof(encryptedTextWithMetadata));
+
+            var (pseudoRandomFunction, iterations) = ParseParameters(parameters, nameof(encryptedTextWithMetadata));
+
+            return DecryptCore(pseudoRandomFunction, iterations, fields[0], fields[1], fields[2], fields[3], password,
+                nameof(encryptedTextWithMetadata)).ToUTF8String();
         }
 
         public Task<byte[]> EncryptDataAsync(byte[] data, string password, CancellationToken cancellationToken = default)
@@ -147,57 +166,138 @@ namespace AleCGN.Security.Cryptography.Encryption.PasswordBased
         public Task<string> DecryptTextAsync(string encryptedTextWithMetadata, string password, CancellationToken cancellationToken = default)
             => Task.Run(() => DecryptText(encryptedTextWithMetadata, password), cancellationToken);
 
+        #endregion Public methods
+
+
         #region Private methods
 
-        private static Pbkdf2Configuration GetKeyDerivationConfiguration(Pbkdf2PseudoRandomFunction pseudoRandomFunction, int iterations)
-            => new Pbkdf2Configuration(pseudoRandomFunction, iterations, Pbkdf2Configuration.MinimumSaltSize, _derivedKeySize);
-
-        private byte[] BuildHeader(byte[] salt)
+        private byte[] DecryptCore(
+            Pbkdf2PseudoRandomFunction pseudoRandomFunction,
+            int iterations,
+            byte[] salt,
+            byte[] nonce,
+            byte[] tag,
+            byte[] ciphertext,
+            string password,
+            string paramName)
         {
-            var header = new byte[_headerFixedSize + salt.Length];
+            if (salt.Length < Pbkdf2Configuration.MinimumSaltSize)
+            {
+                throw PayloadFormat.CreateInvalidPayloadException(paramName);
+            }
 
-            header[0] = _formatVersion;
-            header[1] = (byte)_configuration.PseudoRandomFunction;
-            header[2] = (byte)(_configuration.Iterations & 0xFF);
-            header[3] = (byte)((_configuration.Iterations >> 8) & 0xFF);
-            header[4] = (byte)((_configuration.Iterations >> 16) & 0xFF);
-            header[5] = (byte)((_configuration.Iterations >> 24) & 0xFF);
-            header[6] = (byte)salt.Length;
+            var pbkdf2 = new Pbkdf2(_encoder, new Pbkdf2Configuration(
+                pseudoRandomFunction, iterations, Pbkdf2Configuration.MinimumSaltSize, _derivedKeySize));
+            var derivedKey = pbkdf2.DeriveKey(password.ToUTF8Bytes(), salt);
 
-            Array.Copy(salt, 0, header, _headerFixedSize, salt.Length);
+            try
+            {
+                var associatedData = BuildAssociatedData(pseudoRandomFunction, iterations, salt);
+                var aesPayload = PayloadFormat.BuildBinary(PayloadAlgorithms.Aes256Gcm, nonce, tag, ciphertext);
 
-            return header;
+                using (var aesGcm256 = new AesGcm256(_encoder, derivedKey))
+                {
+                    return aesGcm256.DecryptData(aesPayload, associatedData);
+                }
+            }
+            finally
+            {
+                Array.Clear(derivedKey, 0, derivedKey.Length);
+            }
         }
 
-        private static (Pbkdf2PseudoRandomFunction PseudoRandomFunction, int Iterations, byte[] Salt, int HeaderSize) ParseHeader(
-            byte[] encryptedDataWithMetadata)
+        /// <summary>
+        /// Canonical associated data binding the KDF parameters and salt to the ciphertext,
+        /// identical for payloads produced by the binary and the string APIs.
+        /// </summary>
+        private static byte[] BuildAssociatedData(Pbkdf2PseudoRandomFunction pseudoRandomFunction, int iterations, byte[] salt)
         {
-            if (encryptedDataWithMetadata.Length < _headerFixedSize + 1 ||
-                encryptedDataWithMetadata[0] != _formatVersion ||
-                !Enum.IsDefined(typeof(Pbkdf2PseudoRandomFunction), (int)encryptedDataWithMetadata[1]))
+            var associatedData = new byte[2 + _kdfFieldSize + salt.Length];
+
+            associatedData[0] = PayloadFormat.FormatVersion;
+            associatedData[1] = PayloadAlgorithms.PasswordBasedAes256Gcm;
+
+            var kdfField = BuildKdfField(pseudoRandomFunction, iterations);
+
+            Array.Copy(kdfField, 0, associatedData, 2, _kdfFieldSize);
+            Array.Copy(salt, 0, associatedData, 2 + _kdfFieldSize, salt.Length);
+
+            return associatedData;
+        }
+
+        private static byte[] BuildKdfField(Pbkdf2PseudoRandomFunction pseudoRandomFunction, int iterations)
+            => new[]
             {
-                throw new ArgumentException(LibraryResources.Validation_InvalidPayloadFormat, nameof(encryptedDataWithMetadata));
+                (byte)pseudoRandomFunction,
+                (byte)(iterations & 0xFF),
+                (byte)((iterations >> 8) & 0xFF),
+                (byte)((iterations >> 16) & 0xFF),
+                (byte)((iterations >> 24) & 0xFF)
+            };
+
+        private static (Pbkdf2PseudoRandomFunction PseudoRandomFunction, int Iterations) ParseKdfField(byte[] kdfField, string paramName)
+        {
+            if (kdfField.Length != _kdfFieldSize || !Enum.IsDefined(typeof(Pbkdf2PseudoRandomFunction), (int)kdfField[0]))
+            {
+                throw PayloadFormat.CreateInvalidPayloadException(paramName);
             }
 
-            var pseudoRandomFunction = (Pbkdf2PseudoRandomFunction)encryptedDataWithMetadata[1];
-            var iterations =
-                encryptedDataWithMetadata[2] |
-                (encryptedDataWithMetadata[3] << 8) |
-                (encryptedDataWithMetadata[4] << 16) |
-                (encryptedDataWithMetadata[5] << 24);
-            var saltSize = (int)encryptedDataWithMetadata[6];
-            var headerSize = _headerFixedSize + saltSize;
+            var iterations = kdfField[1] | (kdfField[2] << 8) | (kdfField[3] << 16) | (kdfField[4] << 24);
 
-            if (iterations <= 0 || saltSize < Pbkdf2Configuration.MinimumSaltSize || encryptedDataWithMetadata.Length <= headerSize)
+            if (iterations <= 0)
             {
-                throw new ArgumentException(LibraryResources.Validation_InvalidPayloadFormat, nameof(encryptedDataWithMetadata));
+                throw PayloadFormat.CreateInvalidPayloadException(paramName);
             }
 
-            var salt = new byte[saltSize];
+            return ((Pbkdf2PseudoRandomFunction)kdfField[0], iterations);
+        }
 
-            Array.Copy(encryptedDataWithMetadata, _headerFixedSize, salt, 0, saltSize);
+        private static (Pbkdf2PseudoRandomFunction PseudoRandomFunction, int Iterations) ParseParameters(string parameters, string paramName)
+        {
+            var parts = parameters.Split(',');
 
-            return (pseudoRandomFunction, iterations, salt, headerSize);
+            if (parts.Length != 2 ||
+                !parts[0].StartsWith(_pbkdf2ParameterPrefix, StringComparison.Ordinal) ||
+                !parts[1].StartsWith(_iterationsParameterPrefix, StringComparison.Ordinal) ||
+                !int.TryParse(parts[1].Substring(_iterationsParameterPrefix.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var iterations) ||
+                iterations <= 0)
+            {
+                throw PayloadFormat.CreateInvalidPayloadException(paramName);
+            }
+
+            return (ParsePrfToken(parts[0].Substring(_pbkdf2ParameterPrefix.Length), paramName), iterations);
+        }
+
+        private static string GetPrfToken(Pbkdf2PseudoRandomFunction pseudoRandomFunction)
+        {
+            switch (pseudoRandomFunction)
+            {
+                case Pbkdf2PseudoRandomFunction.HMACSHA1:
+                    return "sha1";
+                case Pbkdf2PseudoRandomFunction.HMACSHA256:
+                    return "sha256";
+                case Pbkdf2PseudoRandomFunction.HMACSHA384:
+                    return "sha384";
+                default:
+                    return "sha512";
+            }
+        }
+
+        private static Pbkdf2PseudoRandomFunction ParsePrfToken(string token, string paramName)
+        {
+            switch (token)
+            {
+                case "sha1":
+                    return Pbkdf2PseudoRandomFunction.HMACSHA1;
+                case "sha256":
+                    return Pbkdf2PseudoRandomFunction.HMACSHA256;
+                case "sha384":
+                    return Pbkdf2PseudoRandomFunction.HMACSHA384;
+                case "sha512":
+                    return Pbkdf2PseudoRandomFunction.HMACSHA512;
+                default:
+                    throw PayloadFormat.CreateInvalidPayloadException(paramName);
+            }
         }
 
         private static void CheckPassword(string password)

@@ -19,8 +19,17 @@ namespace AleCGN.Security.Cryptography.Tests.Asymmetric
             var signer = new RsaPssSigner(_encoder, _rsaKeyPair.PrivateKeyPem, _rsaKeyPair.PublicKeyPem);
             var signature = signer.SignText("important document");
 
+            Assert.StartsWith("$rsa-pss-sha256$v=1$", signature);
             Assert.True(signer.VerifyTextSignature("important document", signature));
             Assert.False(signer.VerifyTextSignature("tampered document", signature));
+        }
+
+        [Fact]
+        public void Ecdsa_SignText_ProducesSelfDescribingFormat()
+        {
+            var signer = new EcdsaSigner(_encoder, _ecdsaKeyPair.PrivateKeyPem, _ecdsaKeyPair.PublicKeyPem);
+
+            Assert.StartsWith("$ecdsa-sha256$v=1$", signer.SignText("document"));
         }
 
         [Fact]

@@ -3,6 +3,7 @@
 using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
 using AleCGN.Security.Cryptography.Encryption.Algorithms.Aes.Helpers;
+using AleCGN.Security.Cryptography.Helpers;
 using AleCGN.Security.Cryptography.Resources;
 using System;
 using System.Security.Cryptography;
@@ -18,7 +19,7 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
         private const int _nonceSize = 12;
         private const int _tagSize = 16;
-        private const int _encryptedDataMinimumSize = 1;
+        private const int _fieldCount = 3; // nonce | tag | ciphertext
         private readonly IEncoder _encoder;
         private readonly AesKeySizes _aesKeySize;
         private AesGcm _aesGcm;
@@ -67,18 +68,22 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
             CheckInputData(data, nameof(data));
             CheckKeySet();
 
-            // Output layout: ciphertext || tag || nonce. Encrypting directly into
-            // slices of the final buffer avoids intermediate arrays and copies.
-            var encryptedDataWithMetadata = new byte[data.Length + _tagSize + _nonceSize];
-            var ciphertext = encryptedDataWithMetadata.AsSpan(0, data.Length);
-            var tag = encryptedDataWithMetadata.AsSpan(data.Length, _tagSize);
-            var nonce = encryptedDataWithMetadata.AsSpan(data.Length + _tagSize, _nonceSize);
+            // Self-describing envelope with explicit fields: nonce | tag | ciphertext.
+            // Encrypting directly into slices of the payload avoids intermediate copies.
+            var payload = PayloadFormat.CreateBinary(
+                GetAlgorithmId(),
+                new[] { _nonceSize, _tagSize, data.Length },
+                out var fieldOffsets);
+
+            var nonce = payload.AsSpan(fieldOffsets[0], _nonceSize);
+            var tag = payload.AsSpan(fieldOffsets[1], _tagSize);
+            var ciphertext = payload.AsSpan(fieldOffsets[2], data.Length);
 
             RandomNumberGenerator.Fill(nonce);
 
             _aesGcm.Encrypt(nonce, data, ciphertext, tag, associatedData);
 
-            return encryptedDataWithMetadata;
+            return payload;
         }
 
         public string EncryptText(string text)
@@ -88,10 +93,10 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         {
             CheckInputText(text, nameof(text));
 
-            var textBytes = text.ToUTF8Bytes();
-            var encryptedTextBytesWithMetadata = EncryptData(textBytes, associatedData);
+            var payload = EncryptData(text.ToUTF8Bytes(), associatedData);
+            var fields = PayloadFormat.ParseBinary(payload, GetAlgorithmId(), _fieldCount, nameof(text));
 
-            return _encoder.Encode(encryptedTextBytesWithMetadata);
+            return PayloadFormat.BuildString(GetAlgorithmName(), null, PayloadFormat.GetFields(payload, fields));
         }
 
         #endregion Encryption
@@ -105,14 +110,20 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         public byte[] DecryptData(byte[] encryptedDataWithMetadata, byte[] associatedData)
         {
             CheckInputData(encryptedDataWithMetadata, nameof(encryptedDataWithMetadata));
-            ValidateEncryptedDataWithMetadataSize(encryptedDataWithMetadata);
             CheckKeySet();
 
-            var ciphertextLength = encryptedDataWithMetadata.Length - _tagSize - _nonceSize;
-            var ciphertext = encryptedDataWithMetadata.AsSpan(0, ciphertextLength);
-            var tag = encryptedDataWithMetadata.AsSpan(ciphertextLength, _tagSize);
-            var nonce = encryptedDataWithMetadata.AsSpan(ciphertextLength + _tagSize, _nonceSize);
-            var decryptedData = new byte[ciphertextLength];
+            var fields = PayloadFormat.ParseBinary(
+                encryptedDataWithMetadata, GetAlgorithmId(), _fieldCount, nameof(encryptedDataWithMetadata));
+
+            if (fields[0].Length != _nonceSize || fields[1].Length != _tagSize || fields[2].Length == 0)
+            {
+                throw PayloadFormat.CreateInvalidPayloadException(nameof(encryptedDataWithMetadata));
+            }
+
+            var nonce = encryptedDataWithMetadata.AsSpan(fields[0].Offset, fields[0].Length);
+            var tag = encryptedDataWithMetadata.AsSpan(fields[1].Offset, fields[1].Length);
+            var ciphertext = encryptedDataWithMetadata.AsSpan(fields[2].Offset, fields[2].Length);
+            var decryptedData = new byte[fields[2].Length];
 
             _aesGcm.Decrypt(nonce, ciphertext, tag, decryptedData, associatedData);
 
@@ -126,11 +137,12 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         {
             CheckInputText(encryptedTextWithMetadata, nameof(encryptedTextWithMetadata));
 
-            var encryptedDataWithMetadata = _encoder.Decode(encryptedTextWithMetadata);
-            var decryptedData = DecryptData(encryptedDataWithMetadata, associatedData);
-            var decryptedText = decryptedData.ToUTF8String();
+            var (_, fields) = PayloadFormat.ParseString(
+                encryptedTextWithMetadata, GetAlgorithmName(), _fieldCount, hasParameters: false, nameof(encryptedTextWithMetadata));
 
-            return decryptedText;
+            var payload = PayloadFormat.BuildBinary(GetAlgorithmId(), fields);
+
+            return DecryptData(payload, associatedData).ToUTF8String();
         }
 
         #endregion Decryption
@@ -209,6 +221,32 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
         #region Private methods
 
+        private byte GetAlgorithmId()
+        {
+            switch (_aesKeySize)
+            {
+                case AesKeySizes.KeySize128Bits:
+                    return PayloadAlgorithms.Aes128Gcm;
+                case AesKeySizes.KeySize192Bits:
+                    return PayloadAlgorithms.Aes192Gcm;
+                default:
+                    return PayloadAlgorithms.Aes256Gcm;
+            }
+        }
+
+        private string GetAlgorithmName()
+        {
+            switch (_aesKeySize)
+            {
+                case AesKeySizes.KeySize128Bits:
+                    return PayloadAlgorithms.Aes128GcmName;
+                case AesKeySizes.KeySize192Bits:
+                    return PayloadAlgorithms.Aes192GcmName;
+                default:
+                    return PayloadAlgorithms.Aes256GcmName;
+            }
+        }
+
         private void CheckInputData(byte[] inputData, string paramName)
         {
             if (inputData == null || inputData.Length == 0)
@@ -230,15 +268,6 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
             if (_key == null || _key.Length == 0)
             {
                 throw new CryptographicException(LibraryResources.Validation_AESKeyNotSet);
-            }
-        }
-
-        private void ValidateEncryptedDataWithMetadataSize(byte[] encryptedDataWithMetadata)
-        {
-            if (encryptedDataWithMetadata is null ||
-                encryptedDataWithMetadata.Length < _nonceSize + _tagSize + _encryptedDataMinimumSize)
-            {
-                ThrowFormattedArgumentException(LibraryResources.Validation_EncryptedDataSize, nameof(encryptedDataWithMetadata));
             }
         }
 

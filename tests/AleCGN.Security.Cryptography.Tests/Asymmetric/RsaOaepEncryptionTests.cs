@@ -26,7 +26,11 @@ namespace AleCGN.Security.Cryptography.Tests.Asymmetric
             var data = Utf8("an AES key, for example");
 
             Assert.Equal(data, rsa.DecryptData(rsa.EncryptData(data)));
-            Assert.Equal("small secret", rsa.DecryptText(rsa.EncryptText("small secret")));
+
+            var encryptedText = rsa.EncryptText("small secret");
+
+            Assert.StartsWith("$rsa-oaep-sha256$v=1$", encryptedText);
+            Assert.Equal("small secret", rsa.DecryptText(encryptedText));
         }
 
         [Fact]

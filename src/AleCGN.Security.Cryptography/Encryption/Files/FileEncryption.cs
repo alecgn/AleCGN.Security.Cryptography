@@ -21,7 +21,7 @@ namespace AleCGN.Security.Cryptography.Encryption.Files
     public class FileEncryption : IFileEncryption
     {
         private static readonly byte[] _magicBytes = { 0x41, 0x43, 0x46, 0x45 }; // "ACFE"
-        private const byte _formatVersion = 1;
+        private const byte _formatVersion = 2; // v2: chunks are self-describing AEAD envelopes (see PayloadFormat)
         private const int _fileIdSize = 8;
         private const int _headerSize = 4 + 1 + _fileIdSize + 4;
         private const int _chunkPrefixSize = 4;
@@ -282,8 +282,9 @@ namespace AleCGN.Security.Cryptography.Encryption.Files
 
             var chunkLength = FromLittleEndianBytes(chunkPrefix);
 
-            // An encrypted chunk is never larger than the original chunk size + AES-GCM metadata (tag 16 + nonce 12).
-            if (chunkLength <= 0 || chunkLength > originalChunkSize + 28 || inputStream.Position + chunkLength > inputStream.Length)
+            // An encrypted chunk is never larger than the original chunk size plus the AEAD
+            // envelope overhead (envelope header/field prefixes + nonce + tag = 47 bytes).
+            if (chunkLength <= 0 || chunkLength > originalChunkSize + 64 || inputStream.Position + chunkLength > inputStream.Length)
             {
                 throw new ArgumentException(LibraryResources.Validation_InvalidPayloadFormat, nameof(inputStream));
             }

@@ -8,25 +8,27 @@ using Org.BouncyCastle.Crypto.Signers;
 namespace AleCGN.Security.Cryptography.Signatures
 {
     /// <summary>
-    /// RSA-PSS digital signatures (SHA-256 by default).
+    /// RSA-PSS digital signatures (SHA-256 by default), producing self-describing signature
+    /// payloads such as "$rsa-pss-sha256$v=1$&lt;signature&gt;".
     /// Keys are provided as PEM-encoded strings (use <see cref="RsaKeyPairHelper"/> to generate them);
     /// the private key is required for signing, the public key for verification.
     /// </summary>
     public class RsaPssSigner : DigitalSignerBase, IRsaPssSigner
     {
-        private readonly HashAlgorithmKind _hashAlgorithmKind;
-
         public RsaPssSigner(
             IEncoder encoder,
             string privateKeyPem = null,
             string publicKeyPem = null,
             HashAlgorithmKind hashAlgorithmKind = HashAlgorithmKind.SHA256)
-            : base(encoder, privateKeyPem, publicKeyPem)
+            : base(encoder, privateKeyPem, publicKeyPem, hashAlgorithmKind)
         {
-            _hashAlgorithmKind = hashAlgorithmKind;
         }
 
+        protected override byte AlgorithmId => PayloadAlgorithms.RsaPss;
+
+        protected override string AlgorithmFamilyName => "rsa-pss";
+
         protected override ISigner CreateSigner()
-            => new PssSigner(new RsaEngine(), DigestHelper.CreateDigest(_hashAlgorithmKind));
+            => new PssSigner(new RsaEngine(), DigestHelper.CreateDigest(HashAlgorithm));
     }
 }

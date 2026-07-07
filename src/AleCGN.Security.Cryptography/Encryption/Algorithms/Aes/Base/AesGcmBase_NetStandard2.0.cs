@@ -24,7 +24,7 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         private const int _nonceSize = 12;
         private const int _tagSize = 16;
         private const int _tagBitsSize = _tagSize * ConstantValues.BitsPerByte;
-        private const int _encryptedDataMinimumSize = 1;
+        private const int _fieldCount = 3; // nonce | tag | ciphertext
         private readonly IEncoder _encoder;
         private readonly AesKeySizes _aesKeySize;
         private readonly GcmBlockCipher _gcmBlockCipher;
@@ -70,19 +70,27 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
             CheckInputData(data, nameof(data));
             CheckKeySet();
 
-            // Output layout: ciphertext || tag || nonce. BouncyCastle already emits
-            // ciphertext and tag together, so it writes straight into the final buffer.
-            var nonce = GenerateNonce();
-            var encryptedDataWithTagSize = InitCipherAndGetOutputSize(forEncryption: true, nonce, associatedData, data.Length);
-            var encryptedDataWithMetadata = new byte[encryptedDataWithTagSize + _nonceSize];
+            var nonce = CryptographyHelper.GenerateSecureRandomBytes(_nonceSize);
+            var ciphertextWithTagSize = InitCipherAndGetOutputSize(forEncryption: true, nonce, associatedData, data.Length);
+            var ciphertextWithTag = new byte[ciphertextWithTagSize];
 
-            var length = _gcmBlockCipher.ProcessBytes(data, 0, data.Length, encryptedDataWithMetadata, 0);
+            var length = _gcmBlockCipher.ProcessBytes(data, 0, data.Length, ciphertextWithTag, 0);
 
-            _gcmBlockCipher.DoFinal(encryptedDataWithMetadata, length);
+            _gcmBlockCipher.DoFinal(ciphertextWithTag, length);
 
-            Array.Copy(nonce, 0, encryptedDataWithMetadata, encryptedDataWithTagSize, _nonceSize);
+            // Self-describing envelope with explicit fields: nonce | tag | ciphertext.
+            // BouncyCastle emits ciphertext||tag contiguously, so the two fields are split here.
+            var ciphertextSize = ciphertextWithTagSize - _tagSize;
+            var payload = PayloadFormat.CreateBinary(
+                GetAlgorithmId(),
+                new[] { _nonceSize, _tagSize, ciphertextSize },
+                out var fieldOffsets);
 
-            return encryptedDataWithMetadata;
+            Array.Copy(nonce, 0, payload, fieldOffsets[0], _nonceSize);
+            Array.Copy(ciphertextWithTag, ciphertextSize, payload, fieldOffsets[1], _tagSize);
+            Array.Copy(ciphertextWithTag, 0, payload, fieldOffsets[2], ciphertextSize);
+
+            return payload;
         }
 
         public string EncryptText(string text)
@@ -92,10 +100,10 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         {
             CheckInputText(text, nameof(text));
 
-            var textBytes = text.ToUTF8Bytes();
-            var encryptedTextBytesWithMetadata = EncryptData(textBytes, associatedData);
+            var payload = EncryptData(text.ToUTF8Bytes(), associatedData);
+            var fields = PayloadFormat.ParseBinary(payload, GetAlgorithmId(), _fieldCount, nameof(text));
 
-            return _encoder.Encode(encryptedTextBytesWithMetadata);
+            return PayloadFormat.BuildString(GetAlgorithmName(), null, PayloadFormat.GetFields(payload, fields));
         }
 
         #endregion Encryption
@@ -109,18 +117,28 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         public byte[] DecryptData(byte[] encryptedDataWithMetadata, byte[] associatedData)
         {
             CheckInputData(encryptedDataWithMetadata, nameof(encryptedDataWithMetadata));
-            ValidateEncryptedDataWithMetadataSize(encryptedDataWithMetadata);
             CheckKeySet();
 
-            var encryptedDataWithTagSize = encryptedDataWithMetadata.Length - _nonceSize;
-            var nonce = new byte[_nonceSize];
+            var fields = PayloadFormat.ParseBinary(
+                encryptedDataWithMetadata, GetAlgorithmId(), _fieldCount, nameof(encryptedDataWithMetadata));
 
-            Array.Copy(encryptedDataWithMetadata, encryptedDataWithTagSize, nonce, 0, _nonceSize);
+            if (fields[0].Length != _nonceSize || fields[1].Length != _tagSize || fields[2].Length == 0)
+            {
+                throw PayloadFormat.CreateInvalidPayloadException(nameof(encryptedDataWithMetadata));
+            }
 
-            var decryptedDataSize = InitCipherAndGetOutputSize(forEncryption: false, nonce, associatedData, encryptedDataWithTagSize);
+            var nonce = PayloadFormat.GetField(encryptedDataWithMetadata, fields[0]);
+
+            // BouncyCastle consumes ciphertext||tag contiguously.
+            var ciphertextWithTag = new byte[fields[2].Length + _tagSize];
+
+            Array.Copy(encryptedDataWithMetadata, fields[2].Offset, ciphertextWithTag, 0, fields[2].Length);
+            Array.Copy(encryptedDataWithMetadata, fields[1].Offset, ciphertextWithTag, fields[2].Length, _tagSize);
+
+            var decryptedDataSize = InitCipherAndGetOutputSize(forEncryption: false, nonce, associatedData, ciphertextWithTag.Length);
             var decryptedData = new byte[decryptedDataSize];
 
-            var length = _gcmBlockCipher.ProcessBytes(encryptedDataWithMetadata, 0, encryptedDataWithTagSize, decryptedData, 0);
+            var length = _gcmBlockCipher.ProcessBytes(ciphertextWithTag, 0, ciphertextWithTag.Length, decryptedData, 0);
 
             _gcmBlockCipher.DoFinal(decryptedData, length);
 
@@ -134,11 +152,12 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
         {
             CheckInputText(encryptedTextWithMetadata, nameof(encryptedTextWithMetadata));
 
-            var encryptedDataWithMetadata = _encoder.Decode(encryptedTextWithMetadata);
-            var decryptedData = DecryptData(encryptedDataWithMetadata, associatedData);
-            var decryptedText = decryptedData.ToUTF8String();
+            var (_, fields) = PayloadFormat.ParseString(
+                encryptedTextWithMetadata, GetAlgorithmName(), _fieldCount, hasParameters: false, nameof(encryptedTextWithMetadata));
 
-            return decryptedText;
+            var payload = PayloadFormat.BuildBinary(GetAlgorithmId(), fields);
+
+            return DecryptData(payload, associatedData).ToUTF8String();
         }
 
         #endregion Decryption
@@ -214,6 +233,32 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
 
         #region Private methods
 
+        private byte GetAlgorithmId()
+        {
+            switch (_aesKeySize)
+            {
+                case AesKeySizes.KeySize128Bits:
+                    return PayloadAlgorithms.Aes128Gcm;
+                case AesKeySizes.KeySize192Bits:
+                    return PayloadAlgorithms.Aes192Gcm;
+                default:
+                    return PayloadAlgorithms.Aes256Gcm;
+            }
+        }
+
+        private string GetAlgorithmName()
+        {
+            switch (_aesKeySize)
+            {
+                case AesKeySizes.KeySize128Bits:
+                    return PayloadAlgorithms.Aes128GcmName;
+                case AesKeySizes.KeySize192Bits:
+                    return PayloadAlgorithms.Aes192GcmName;
+                default:
+                    return PayloadAlgorithms.Aes256GcmName;
+            }
+        }
+
         private void CheckInputData(byte[] inputData, string paramName)
         {
             if (inputData == null || inputData.Length == 0)
@@ -237,18 +282,6 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Aes
                 throw new CryptographicException(LibraryResources.Validation_AESKeyNotSet);
             }
         }
-
-        private void ValidateEncryptedDataWithMetadataSize(byte[] encryptedDataWithMetadata)
-        {
-            if (encryptedDataWithMetadata is null ||
-                encryptedDataWithMetadata.Length < _nonceSize + _tagSize + _encryptedDataMinimumSize)
-            {
-                ThrowFormattedArgumentException(LibraryResources.Validation_EncryptedDataSize, nameof(encryptedDataWithMetadata));
-            }
-        }
-
-        private byte[] GenerateNonce()
-            => CryptographyHelper.GenerateSecureRandomBytes(_nonceSize);
 
         private int InitCipherAndGetOutputSize(bool forEncryption, byte[] nonce, byte[] associatedData, int inputSize)
         {

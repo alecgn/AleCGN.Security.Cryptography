@@ -43,17 +43,17 @@ dotnet add package AleCGN.Security.Cryptography.DependencyInjection   # optional
 
 The library multi-targets `netstandard2.0`, `netstandard2.1` and `net8.0`. Consumers automatically get the best implementation available for their runtime:
 
-| Feature | netstandard2.0 (.NET Framework 4.6.1+, .NET Core 2.x) | netstandard2.1 (.NET Core 3.x, Mono, Xamarin) | net8.0+ |
-|---|---|---|---|
-| AES-GCM | BouncyCastle `GcmBlockCipher` | Native `System.Security.Cryptography.AesGcm` (spans, zero-copy) | Native `AesGcm` (hardware intrinsics) |
-| ChaCha20-Poly1305 | BouncyCastle | BouncyCastle | BouncyCastle |
-| PBKDF2 | BouncyCastle `Pkcs5S2ParametersGenerator` | `Rfc2898DeriveBytes` | Static one-shot `Rfc2898DeriveBytes.Pbkdf2` |
-| Argon2id | BouncyCastle | BouncyCastle | BouncyCastle |
-| HKDF | BouncyCastle `HkdfBytesGenerator` | BouncyCastle | Native `System.Security.Cryptography.HKDF` |
-| Hash / HMAC | Native | Native | Native |
-| RSA / ECDSA / PEM | BouncyCastle | BouncyCastle | BouncyCastle |
-| Random | Shared `RandomNumberGenerator` instance | `RandomNumberGenerator.Fill` | `RandomNumberGenerator.Fill` |
-| Fixed-time compare | Constant-time loop | `CryptographicOperations.FixedTimeEquals` | `CryptographicOperations.FixedTimeEquals` |
+| Feature            | netstandard2.0 (.NET Framework 4.6.1+, .NET Core 2.x) | netstandard2.1 (.NET Core 3.x, Mono, Xamarin)                    | net8.0+                                      |
+| ------------------ | ----------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------------------- |
+| AES-GCM            | BouncyCastle`GcmBlockCipher`                        | Native`System.Security.Cryptography.AesGcm` (spans, zero-copy) | Native`AesGcm` (hardware intrinsics)       |
+| ChaCha20-Poly1305  | BouncyCastle                                          | BouncyCastle                                                     | BouncyCastle                                 |
+| PBKDF2             | BouncyCastle`Pkcs5S2ParametersGenerator`            | `Rfc2898DeriveBytes`                                           | Static one-shot`Rfc2898DeriveBytes.Pbkdf2` |
+| Argon2id           | BouncyCastle                                          | BouncyCastle                                                     | BouncyCastle                                 |
+| HKDF               | BouncyCastle`HkdfBytesGenerator`                    | BouncyCastle                                                     | Native`System.Security.Cryptography.HKDF`  |
+| Hash / HMAC        | Native                                                | Native                                                           | Native                                       |
+| RSA / ECDSA / PEM  | BouncyCastle                                          | BouncyCastle                                                     | BouncyCastle                                 |
+| Random             | Shared`RandomNumberGenerator` instance              | `RandomNumberGenerator.Fill`                                   | `RandomNumberGenerator.Fill`               |
+| Fixed-time compare | Constant-time loop                                    | `CryptographicOperations.FixedTimeEquals`                      | `CryptographicOperations.FixedTimeEquals`  |
 
 All payload formats are **byte-for-byte identical across frameworks**: data encrypted or signed on .NET Framework 4.8 decrypts and verifies on .NET 8 and vice versa (covered by cross-framework functional checks in the sample suite).
 
@@ -63,7 +63,7 @@ Dependencies: [BouncyCastle.Cryptography](https://www.nuget.org/packages/BouncyC
 
 - **Interface-first.** Every service has an interface (`IAesGcm256`, `IPasswordHasher`, `ISHA256`, ...) for testability and DI.
 - **Pluggable string encoding.** Classes that produce or consume strings take an [`IEncoder`](#encoders) in the constructor; the same operation can emit Base64, Base64Url, Base32 or hexadecimal without changing call sites.
-- **Self-contained outputs.** Encrypted payloads and password hashes embed everything needed to reverse the operation later (nonce, tag, salt, KDF parameters) — there is nothing extra to store, and parameter upgrades never break old data.
+- **Self-describing outputs.** Every encrypted payload, password hash and signature uses a canonical envelope that names the algorithm, format version and each field explicitly — nothing is ever inferred from byte positions or sizes. Text APIs emit PHC-style strings (`$aes256-gcm$v=1$<nonce>$<tag>$<ciphertext>`); binary APIs emit an equivalent tagged binary envelope with length-prefixed fields (see [Payload format reference](#payload-format-reference)). Everything needed to reverse the operation later (nonce, tag, salt, KDF parameters) travels inside the payload, and parameter upgrades never break old data.
 - **Fixed-time verification.** All `Verify*` APIs (hash, HMAC, derived keys, passwords) compare in constant time to prevent timing attacks.
 - **Defensive key handling.** Keys passed in are copied (caller mutations don't affect the instance); replaced or disposed keys are zeroed in memory.
 - **Fail loudly on bad input.** Arguments are validated up front with descriptive `ArgumentException`s; authentication failures throw `CryptographicException` (or the BouncyCastle equivalent) rather than returning garbage.
@@ -106,12 +106,12 @@ public interface IEncoder
 }
 ```
 
-| Class | Format | Typical use |
-|---|---|---|
-| `Base64Encoder` | Standard Base64 (RFC 4648 §4) | General-purpose, storage, transport |
-| `Base64UrlEncoder` | URL-safe Base64, unpadded (RFC 4648 §5) | URLs, file names, JWT-like tokens, query strings |
-| `Base32Encoder` | Base32, uppercase padded output (RFC 4648 §6); decoding accepts lowercase and missing padding | TOTP/2FA secrets, case-insensitive identifiers |
-| `HexadecimalEncoder` | Uppercase hex; decoding accepts lowercase and an optional `0x` prefix | Hash digests, debugging, interop with hex-based systems |
+| Class                  | Format                                                                                         | Typical use                                             |
+| ---------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `Base64Encoder`      | Standard Base64 (RFC 4648 §4)                                                                 | General-purpose, storage, transport                     |
+| `Base64UrlEncoder`   | URL-safe Base64, unpadded (RFC 4648 §5)                                                       | URLs, file names, JWT-like tokens, query strings        |
+| `Base32Encoder`      | Base32, uppercase padded output (RFC 4648 §6); decoding accepts lowercase and missing padding | TOTP/2FA secrets, case-insensitive identifiers          |
+| `HexadecimalEncoder` | Uppercase hex; decoding accepts lowercase and an optional`0x` prefix                         | Hash digests, debugging, interop with hex-based systems |
 
 ```csharp
 IEncoder hex = new HexadecimalEncoder();
@@ -250,11 +250,11 @@ Namespace: `AleCGN.Security.Cryptography.KeyDerivation`
 
 Three KDFs, three jobs:
 
-| Class | Algorithm | Input | Use when |
-|---|---|---|---|
-| `Pbkdf2` | PBKDF2 (RFC 8018) | Low-entropy password | FIPS-constrained environments, interop |
-| `Argon2id` | Argon2id (RFC 9106) | Low-entropy password | Best-practice password hashing/derivation (memory-hard) |
-| `Hkdf` | HKDF (RFC 5869) | **Already-strong** key material | Expanding a master key into sub-keys |
+| Class        | Algorithm           | Input                                 | Use when                                                |
+| ------------ | ------------------- | ------------------------------------- | ------------------------------------------------------- |
+| `Pbkdf2`   | PBKDF2 (RFC 8018)   | Low-entropy password                  | FIPS-constrained environments, interop                  |
+| `Argon2id` | Argon2id (RFC 9106) | Low-entropy password                  | Best-practice password hashing/derivation (memory-hard) |
+| `Hkdf`     | HKDF (RFC 5869)     | **Already-strong** key material | Expanding a master key into sub-keys                    |
 
 ### PBKDF2
 
@@ -380,7 +380,7 @@ Key properties:
 
 Both AEAD ciphers share the same conventions:
 
-- **Output layout:** `ciphertext ‖ tag(16) ‖ nonce(12)` — a single self-contained buffer; nothing else to store.
+- **Self-describing output:** text APIs return `$<algorithm>$v=1$<nonce>$<tag>$<ciphertext>` (unpadded Base64 fields); binary APIs return the equivalent tagged binary envelope. Algorithm, version and every field are explicit — a payload produced by `AesGcm128` is rejected by `AesGcm256` with a clear format error instead of a confusing authentication failure.
 - A **fresh random nonce** is generated per encryption (CSPRNG). You never manage nonces manually, which removes the classic catastrophic GCM misuse (nonce reuse).
 - Optional **associated data (AAD)**: authenticated but not encrypted. Decryption fails if the AAD differs.
 - `SetOrUpdateKey(byte[] | string)` swaps the key; old key material is zeroed. `Dispose()` zeroes the key.
@@ -461,7 +461,7 @@ string decrypted = chacha.DecryptText(encrypted, "context"u8.ToArray());
 
 Namespace: `AleCGN.Security.Cryptography.Encryption.PasswordBased`
 
-“Encrypt this with this password” in one call: PBKDF2 derives a 256-bit key, AES-GCM-256 encrypts, and a self-describing header (KDF parameters + salt) is prepended to the payload **and bound as AAD** — tampering with the stored parameters invalidates the ciphertext.
+“Encrypt this with this password” in one call: PBKDF2 derives a 256-bit key, AES-GCM-256 encrypts, and the output is fully self-describing — `$pbe-aes256-gcm$v=1$pbkdf2-sha256,i=600000$<salt>$<nonce>$<tag>$<ciphertext>` — with the KDF parameters and salt **bound as associated data**: tampering with the stored parameters invalidates the ciphertext.
 
 ```csharp
 public interface IPasswordBasedEncryption
@@ -599,10 +599,10 @@ string encryptedAsync = await rsa.EncryptTextAsync("secret", ct);
 RSA encrypts **small payloads only**. Maximum plaintext with OAEP-SHA256:
 
 | Key size | Max plaintext |
-|---|---|
-| 2048-bit | 190 bytes |
-| 3072-bit | 318 bytes |
-| 4096-bit | 446 bytes |
+| -------- | ------------- |
+| 2048-bit | 190 bytes     |
+| 3072-bit | 318 bytes     |
+| 4096-bit | 446 bytes     |
 
 **Standard pattern (hybrid encryption):** generate a random AES-256 key, encrypt the data with [AES-GCM](#aes-gcm), encrypt the AES key with RSA-OAEP, ship both.
 
@@ -696,17 +696,17 @@ services.AddAleCGNCryptography(options =>
 });
 ```
 
-| Service | Notes |
-|---|---|
-| `IEncoder` | Per `options.Encoder`; injected into every other service |
-| `IMD5`, `ISHA1`, `ISHA256`, `ISHA384`, `ISHA512` | Always registered |
-| `IHMACMD5` ... `IHMACSHA512` | Keyed when `HmacKey` is set, keyless otherwise |
-| `IAesGcm128/192/256`, `IChaCha20Poly1305` | Keyed when the corresponding key option is set, keyless otherwise (`SetOrUpdateKey` before use) |
-| `IPbkdf2`, `IArgon2id`, `IHkdf`, `IPasswordHasher` | Use the configured `Pbkdf2Configuration`/`Argon2idConfiguration` |
-| `IPasswordBasedEncryption`, `IFileEncryption` | `IFileEncryption` uses the registered `IAesGcm256` |
-| `ISymmetricKeyHelper`, `IRsaKeyPairHelper`, `IEcdsaKeyPairHelper` | Always registered |
-| `IRsaOaepEncryption`, `IRsaPssSigner`, `IEcdsaSigner` | Registered with the configured PEM keys (may be keyless) |
-| `IDataProtection` | Only when `DataProtectionConfiguration` is set (Windows) |
+| Service                                                                 | Notes                                                                                             |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `IEncoder`                                                            | Per`options.Encoder`; injected into every other service                                         |
+| `IMD5`, `ISHA1`, `ISHA256`, `ISHA384`, `ISHA512`              | Always registered                                                                                 |
+| `IHMACMD5` ... `IHMACSHA512`                                        | Keyed when`HmacKey` is set, keyless otherwise                                                   |
+| `IAesGcm128/192/256`, `IChaCha20Poly1305`                           | Keyed when the corresponding key option is set, keyless otherwise (`SetOrUpdateKey` before use) |
+| `IPbkdf2`, `IArgon2id`, `IHkdf`, `IPasswordHasher`              | Use the configured`Pbkdf2Configuration`/`Argon2idConfiguration`                               |
+| `IPasswordBasedEncryption`, `IFileEncryption`                       | `IFileEncryption` uses the registered `IAesGcm256`                                            |
+| `ISymmetricKeyHelper`, `IRsaKeyPairHelper`, `IEcdsaKeyPairHelper` | Always registered                                                                                 |
+| `IRsaOaepEncryption`, `IRsaPssSigner`, `IEcdsaSigner`             | Registered with the configured PEM keys (may be keyless)                                          |
+| `IDataProtection`                                                     | Only when`DataProtectionConfiguration` is set (Windows)                                         |
 
 ```csharp
 public class UserService(IPasswordHasher passwordHasher, IAesGcm256 aes)
@@ -720,73 +720,101 @@ public class UserService(IPasswordHasher passwordHasher, IAesGcm256 aes)
 
 ## Payload format reference
 
-All multi-byte integers are **little-endian**. Sizes in bytes.
+Every payload produced by the library is **self-describing**: the algorithm, format version and each field are explicit — nothing is inferred from byte positions or sizes. There is one canonical envelope with two representations.
 
-**AEAD payload (AES-GCM and ChaCha20-Poly1305)**
+### String envelope (all `*Text` APIs and `SignText`)
 
-```
-+------------------+---------+-----------+
-| ciphertext (n)   | tag(16) | nonce(12) |
-+------------------+---------+-----------+
-```
-
-**Password-based encryption**
+PHC-style, with **unpadded Base64** fields (fixed encoding, independent of the injected `IEncoder`):
 
 ```
-+---------+--------+---------------+--------------+----------+--------------------------+
-| ver(1)  | prf(1) | iterations(4) | saltSize(1)  | salt(s)  | AEAD payload (see above) |
-+---------+--------+---------------+--------------+----------+--------------------------+
-   ver = 1   prf = Pbkdf2PseudoRandomFunction enum value
+$<algorithm>$v=1$[<parameters>$]<field1>$<field2>$...
 ```
-The header (everything before the AEAD payload) is the AAD of the AES-GCM encryption — modifying any KDF parameter invalidates the tag.
 
-**Encrypted file**
+| Algorithm | Format |
+|---|---|
+| AES-GCM | `$aes128-gcm\|aes192-gcm\|aes256-gcm$v=1$<nonce>$<tag>$<ciphertext>` |
+| ChaCha20-Poly1305 | `$chacha20-poly1305$v=1$<nonce>$<tag>$<ciphertext>` |
+| Password-based encryption | `$pbe-aes256-gcm$v=1$pbkdf2-<sha1\|sha256\|sha384\|sha512>,i=<iterations>$<salt>$<nonce>$<tag>$<ciphertext>` |
+| RSA-OAEP | `$rsa-oaep-<digest>$v=1$<ciphertext>` |
+| Windows DPAPI | `$dpapi$v=1$<protected-blob>` |
+| RSA-PSS signature | `$rsa-pss-<digest>$v=1$<signature>` |
+| ECDSA signature | `$ecdsa-<digest>$v=1$<signature>` |
+
+### Binary envelope (all `*Data` APIs and `SignData`)
+
+The same information in tagged binary form. All multi-byte integers are **little-endian**:
+
+```
++-----------+--------+---------------+----------------+   +--------------------+---------------+
+| "ACGN"(4) | ver(1) | algorithm(1)  | field count(1) |   | field length(4 LE) | field bytes   |  ... per field
++-----------+--------+---------------+----------------+   +--------------------+---------------+
+```
+
+| Algorithm id | Algorithm | Fields (in order) |
+|---|---|---|
+| 1 / 2 / 3 | aes128-gcm / aes192-gcm / aes256-gcm | nonce(12), tag(16), ciphertext |
+| 4 | chacha20-poly1305 | nonce(12), tag(16), ciphertext |
+| 5 | pbe-aes256-gcm | kdf = prf(1)+iterations(4), salt, nonce(12), tag(16), ciphertext |
+| 6 | rsa-oaep | digest(1), ciphertext |
+| 7 | dpapi | protected blob |
+| 8 | rsa-pss | digest(1), signature |
+| 9 | ecdsa | digest(1), signature |
+
+Parsing validates magic, version, algorithm id, field count and every field length (including trailing bytes); any mismatch throws a descriptive `ArgumentException` — a payload from the wrong algorithm/key size is rejected by format, never by garbled output. String and binary payloads carry identical fields, so either form can be reconstructed from the other.
+
+**Password-based encryption AAD:** the canonical byte sequence `version(1) ‖ algorithm(1) ‖ prf(1) ‖ iterations(4 LE) ‖ salt` is bound as associated data — identical for payloads produced via the string and binary APIs; modifying any KDF parameter invalidates the tag.
+
+### Encrypted file (chunked)
 
 ```
 header:  +-----------+--------+------------+--------------+
          | "ACFE"(4) | ver(1) | fileId(8)  | chunkSize(4) |
-         +-----------+--------+------------+--------------+
-chunk:   +-------------+---------------------------+
-         | length(4)   | AEAD payload (ct‖tag‖nonce) |     ... repeated
-         +-------------+---------------------------+
-AAD per chunk: fileId(8) ‖ chunkIndex(4) ‖ isLastChunk(1)
+         +-----------+--------+------------+--------------+     ver = 2
+chunk:   +-------------+-------------------------------------+
+         | length(4)   | AEAD binary envelope (see above)    |   ... repeated
+         +-------------+-------------------------------------+
+AAD per chunk: fileId(8) ‖ chunkIndex(4 LE) ‖ isLastChunk(1)
 ```
 
-**Password hash (PHC string)**
+### Password hash (PHC string)
 
 ```
 $argon2id$v=19$m=<KB>,t=<iters>,p=<lanes>$<salt-b64-unpadded>$<hash-b64-unpadded>
 $pbkdf2-<sha1|sha256|sha384|sha512>$i=<iterations>$<salt-b64-unpadded>$<hash-b64-unpadded>
 ```
 
+### Deliberately plain (no envelope)
+
+Hash digests, HMAC values, derived keys and generated keys are **single opaque fields** — there is no positional ambiguity to describe, and they must interoperate with external systems (published `SHA256SUMS`, webhook signature headers, keys fed into other tools). They are returned encoded with the injected `IEncoder`, exactly as before.
+
 ---
 
 ## Thread safety
 
-| Component | Thread-safe? | Notes |
-|---|---|---|
-| Encoders | ✅ | Stateless |
-| Hash classes (`SHA256`, ...) | ✅ | Algorithm instance created per operation |
-| HMAC classes | ✅ for compute/verify | `SetOrUpdateKey`/`Dispose` must not race with operations |
-| `Pbkdf2`, `Argon2id`, `Hkdf`, `PasswordHasher` | ✅ | Stateless per operation |
-| AES-GCM classes | ❌ | Shared cipher state — use one instance per thread or synchronize |
-| `ChaCha20Poly1305` | ✅ for encrypt/decrypt | Cipher created per operation; key updates must not race |
-| `PasswordBasedEncryption` | ✅ | Creates its AES instance per operation |
-| `FileEncryption` | ❌ | Inherits the AES-GCM instance's constraints |
-| Key pair helpers, signers, `RsaOaepEncryption` | ✅ | Signer/engine created per operation; keys are immutable after construction |
+| Component                                              | Thread-safe?           | Notes                                                                      |
+| ------------------------------------------------------ | ---------------------- | -------------------------------------------------------------------------- |
+| Encoders                                               | ✅                     | Stateless                                                                  |
+| Hash classes (`SHA256`, ...)                         | ✅                     | Algorithm instance created per operation                                   |
+| HMAC classes                                           | ✅ for compute/verify  | `SetOrUpdateKey`/`Dispose` must not race with operations               |
+| `Pbkdf2`, `Argon2id`, `Hkdf`, `PasswordHasher` | ✅                     | Stateless per operation                                                    |
+| AES-GCM classes                                        | ❌                     | Shared cipher state — use one instance per thread or synchronize          |
+| `ChaCha20Poly1305`                                   | ✅ for encrypt/decrypt | Cipher created per operation; key updates must not race                    |
+| `PasswordBasedEncryption`                            | ✅                     | Creates its AES instance per operation                                     |
+| `FileEncryption`                                     | ❌                     | Inherits the AES-GCM instance's constraints                                |
+| Key pair helpers, signers,`RsaOaepEncryption`        | ✅                     | Signer/engine created per operation; keys are immutable after construction |
 
 ---
 
 ## Error handling
 
-| Situation | Exception |
-|---|---|
-| Null/empty/whitespace argument, invalid encoded string, malformed PHC hash, corrupted payload header, invalid PEM | `ArgumentException` (message names the parameter) |
-| File not found | `FileNotFoundException` |
-| Operating without a key / missing PEM key | `CryptographicException` |
-| Authentication failure (wrong key/password/AAD, tampering, truncation) | `CryptographicException` on native paths; `Org.BouncyCastle.Crypto.InvalidCipherTextException` on BouncyCastle paths — catch `Exception` or both when handling "wrong password" flows |
-| Cancellation of async file APIs | `OperationCanceledException` |
-| DPAPI on non-Windows | `PlatformNotSupportedException` |
+| Situation                                                                                                         | Exception                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Null/empty/whitespace argument, invalid encoded string, malformed PHC hash, corrupted payload header, invalid PEM | `ArgumentException` (message names the parameter)                                                                                                                                          |
+| File not found                                                                                                    | `FileNotFoundException`                                                                                                                                                                    |
+| Operating without a key / missing PEM key                                                                         | `CryptographicException`                                                                                                                                                                   |
+| Authentication failure (wrong key/password/AAD, tampering, truncation)                                            | `CryptographicException` on native paths; `Org.BouncyCastle.Crypto.InvalidCipherTextException` on BouncyCastle paths — catch `Exception` or both when handling "wrong password" flows |
+| Cancellation of async file APIs                                                                                   | `OperationCanceledException`                                                                                                                                                               |
+| DPAPI on non-Windows                                                                                              | `PlatformNotSupportedException`                                                                                                                                                            |
 
 `Verify*` methods return `false` for mismatches (and for malformed signatures) — they only throw for invalid *arguments*.
 

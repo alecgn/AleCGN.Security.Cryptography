@@ -106,15 +106,6 @@ namespace AleCGN.Security.Cryptography.Resources {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Data to decrypt is not valid (wrong size/length)..
-        /// </summary>
-        internal static string Validation_EncryptedDataSize {
-            get {
-                return ResourceManager.GetString("Validation_EncryptedDataSize", resourceCulture);
-            }
-        }
-        
-        /// <summary>
         ///   Looks up a localized string similar to File not found..
         /// </summary>
         internal static string Validation_FileNotFound {

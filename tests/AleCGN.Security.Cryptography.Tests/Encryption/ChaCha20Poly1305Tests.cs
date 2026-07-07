@@ -22,10 +22,12 @@ namespace AleCGN.Security.Cryptography.Tests.Encryption
                 var encryptedData = chacha.EncryptData(data);
 
                 Assert.Equal(data, chacha.DecryptData(encryptedData));
-                Assert.Equal(data.Length + 28, encryptedData.Length); // ct || tag(16) || nonce(12)
+                // self-describing envelope: header(7) + 3 field prefixes(12) + nonce(12) + tag(16) + ciphertext
+                Assert.Equal(data.Length + 47, encryptedData.Length);
 
                 var encryptedText = chacha.EncryptText("sensitive text");
 
+                Assert.StartsWith("$chacha20-poly1305$v=1$", encryptedText);
                 Assert.Equal("sensitive text", chacha.DecryptText(encryptedText));
             }
         }

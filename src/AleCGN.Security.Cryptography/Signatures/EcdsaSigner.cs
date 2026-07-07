@@ -1,5 +1,6 @@
 using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Hash;
+using AleCGN.Security.Cryptography.Helpers;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Security;
 using System.Security.Cryptography;
@@ -7,7 +8,8 @@ using System.Security.Cryptography;
 namespace AleCGN.Security.Cryptography.Signatures
 {
     /// <summary>
-    /// ECDSA digital signatures (SHA-256 by default).
+    /// ECDSA digital signatures (SHA-256 by default), producing self-describing signature
+    /// payloads such as "$ecdsa-sha256$v=1$&lt;signature&gt;".
     /// Keys are provided as PEM-encoded strings (use <see cref="EcdsaKeyPairHelper"/> to generate them);
     /// the private key is required for signing, the public key for verification.
     /// </summary>
@@ -20,10 +22,14 @@ namespace AleCGN.Security.Cryptography.Signatures
             string privateKeyPem = null,
             string publicKeyPem = null,
             HashAlgorithmKind hashAlgorithmKind = HashAlgorithmKind.SHA256)
-            : base(encoder, privateKeyPem, publicKeyPem)
+            : base(encoder, privateKeyPem, publicKeyPem, hashAlgorithmKind)
         {
             _signerAlgorithm = GetSignerAlgorithm(hashAlgorithmKind);
         }
+
+        protected override byte AlgorithmId => PayloadAlgorithms.Ecdsa;
+
+        protected override string AlgorithmFamilyName => "ecdsa";
 
         protected override ISigner CreateSigner()
             => SignerUtilities.GetSigner(_signerAlgorithm);

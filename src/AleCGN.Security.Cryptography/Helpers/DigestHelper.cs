@@ -26,6 +26,25 @@ namespace AleCGN.Security.Cryptography.Helpers
             }
         }
 
+        internal static string GetAlgorithmToken(HashAlgorithmKind hashAlgorithmKind)
+        {
+            switch (hashAlgorithmKind)
+            {
+                case HashAlgorithmKind.MD5:
+                    return "md5";
+                case HashAlgorithmKind.SHA1:
+                    return "sha1";
+                case HashAlgorithmKind.SHA256:
+                    return "sha256";
+                case HashAlgorithmKind.SHA384:
+                    return "sha384";
+                case HashAlgorithmKind.SHA512:
+                    return "sha512";
+                default:
+                    throw new CryptographicException($"Unsupported hash algorithm: {hashAlgorithmKind}.");
+            }
+        }
+
         internal static HashAlgorithmName GetHashAlgorithmName(HashAlgorithmKind hashAlgorithmKind)
         {
             switch (hashAlgorithmKind)

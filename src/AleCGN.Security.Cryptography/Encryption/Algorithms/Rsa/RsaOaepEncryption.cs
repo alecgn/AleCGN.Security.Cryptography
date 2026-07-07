@@ -58,14 +58,20 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Rsa
 
             engine.Init(true, _publicKey);
 
-            return engine.ProcessBlock(data, 0, data.Length);
+            var ciphertext = engine.ProcessBlock(data, 0, data.Length);
+
+            // Self-describing envelope: OAEP digest | ciphertext.
+            return PayloadFormat.BuildBinary(PayloadAlgorithms.RsaOaep, new[] { (byte)_oaepDigest }, ciphertext);
         }
 
         public string EncryptText(string text)
         {
             CheckInputText(text, nameof(text));
 
-            return _encoder.Encode(EncryptData(text.ToUTF8Bytes()));
+            var payload = EncryptData(text.ToUTF8Bytes());
+            var fields = PayloadFormat.ParseBinary(payload, PayloadAlgorithms.RsaOaep, 2, nameof(text));
+
+            return PayloadFormat.BuildString(GetAlgorithmName(), null, PayloadFormat.GetField(payload, fields[1]));
         }
 
         public byte[] DecryptData(byte[] encryptedData)
@@ -77,19 +83,34 @@ namespace AleCGN.Security.Cryptography.Encryption.Algorithms.Rsa
                 throw new CryptographicException(LibraryResources.Validation_PrivateKeyNotSet);
             }
 
+            var fields = PayloadFormat.ParseBinary(encryptedData, PayloadAlgorithms.RsaOaep, 2, nameof(encryptedData));
+
+            if (fields[0].Length != 1 || encryptedData[fields[0].Offset] != (byte)_oaepDigest || fields[1].Length == 0)
+            {
+                throw PayloadFormat.CreateInvalidPayloadException(nameof(encryptedData));
+            }
+
             var engine = CreateEngine();
 
             engine.Init(false, _privateKey);
 
-            return engine.ProcessBlock(encryptedData, 0, encryptedData.Length);
+            return engine.ProcessBlock(encryptedData, fields[1].Offset, fields[1].Length);
         }
 
         public string DecryptText(string encryptedText)
         {
             CheckInputText(encryptedText, nameof(encryptedText));
 
-            return DecryptData(_encoder.Decode(encryptedText)).ToUTF8String();
+            var (_, fields) = PayloadFormat.ParseString(
+                encryptedText, GetAlgorithmName(), 1, hasParameters: false, nameof(encryptedText));
+
+            var payload = PayloadFormat.BuildBinary(PayloadAlgorithms.RsaOaep, new[] { (byte)_oaepDigest }, fields[0]);
+
+            return DecryptData(payload).ToUTF8String();
         }
+
+        private string GetAlgorithmName()
+            => "rsa-oaep-" + DigestHelper.GetAlgorithmToken(_oaepDigest);
 
         public Task<byte[]> EncryptDataAsync(byte[] data, CancellationToken cancellationToken = default)
             => Task.Run(() => EncryptData(data), cancellationToken);

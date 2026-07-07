@@ -129,9 +129,6 @@
   <data name="Validation_ArgumentStringNullEmpytOrWhitespace" xml:space="preserve">
     <value>Parameter '{0}' cannot be null, empty or whitespace.</value>
   </data>
-  <data name="Validation_EncryptedDataSize" xml:space="preserve">
-    <value>Data to decrypt is not valid (wrong size/length).</value>
-  </data>
   <data name="Validation_InvalidBase64String" xml:space="preserve">
     <value>Parameter '{0}' is not a valid base64 string.</value>
   </data>
