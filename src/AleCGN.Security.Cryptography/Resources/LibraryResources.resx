@@ -117,12 +117,6 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
-  <data name="RegularExpression_Base64String" xml:space="preserve">
-    <value>^[a-zA-Z0-9\+\/]*={0,3}$</value>
-  </data>
-  <data name="RegularExpression_HexadecimalString" xml:space="preserve">
-    <value>^(0(?:x|X))?([0-9a-fA-F]+)$</value>
-  </data>
   <data name="Validation_AESKey" xml:space="preserve">
     <value>Invalid AES key.</value>
   </data>
@@ -135,13 +129,43 @@
   <data name="Validation_ArgumentStringNullEmpytOrWhitespace" xml:space="preserve">
     <value>Parameter '{0}' cannot be null, empty or whitespace.</value>
   </data>
-  <data name="Validation_EncryptedDataSize" xml:space="preserve">
-    <value>Data to decrypt is not valid (wrong size/length).</value>
-  </data>
   <data name="Validation_InvalidBase64String" xml:space="preserve">
     <value>Parameter '{0}' is not a valid base64 string.</value>
   </data>
   <data name="Validation_InvalidHexadecimalString" xml:space="preserve">
     <value>Parameter '{0}' is not a valid hexadecimal string.</value>
+  </data>
+  <data name="Validation_FileNotFound" xml:space="preserve">
+    <value>File not found.</value>
+  </data>
+  <data name="Validation_ArgumentOutOfRange" xml:space="preserve">
+    <value>Parameter '{0}' with value out of range, verify.</value>
+  </data>
+  <data name="Validation_Pbkdf2SaltSize" xml:space="preserve">
+    <value>Parameter '{0}' must be at least 8 bytes long (RFC 8018).</value>
+  </data>
+  <data name="Validation_InvalidBase32String" xml:space="preserve">
+    <value>Parameter '{0}' is not a valid base32 string.</value>
+  </data>
+  <data name="Validation_InvalidKey" xml:space="preserve">
+    <value>Invalid key (wrong size/length) for the selected algorithm.</value>
+  </data>
+  <data name="Validation_KeyNotSet" xml:space="preserve">
+    <value>Key not set; when instantiating this class with the constructor without a key, the SetOrUpdateKey(...) method must be called before performing any operation, providing a valid key.</value>
+  </data>
+  <data name="Validation_InvalidPasswordHash" xml:space="preserve">
+    <value>Parameter '{0}' is not a valid password hash string.</value>
+  </data>
+  <data name="Validation_InvalidPayloadFormat" xml:space="preserve">
+    <value>The encrypted payload format is not valid or the data is corrupted.</value>
+  </data>
+  <data name="Validation_InvalidPemKey" xml:space="preserve">
+    <value>Parameter '{0}' is not a valid PEM-encoded key.</value>
+  </data>
+  <data name="Validation_PublicKeyNotSet" xml:space="preserve">
+    <value>Public key not set; provide a PEM-encoded public key in the constructor to perform this operation.</value>
+  </data>
+  <data name="Validation_PrivateKeyNotSet" xml:space="preserve">
+    <value>Private key not set; provide a PEM-encoded private key in the constructor to perform this operation.</value>
   </data>
 </root>

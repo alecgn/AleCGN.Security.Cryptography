@@ -1,10 +1,6 @@
-﻿using AleCGN.Security.Cryptography.Encoders.Extensions;
+using AleCGN.Security.Cryptography.Encoders.Extensions;
 using AleCGN.Security.Cryptography.Resources;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-//using System.Text;
-using System.Text.RegularExpressions;
 using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
 
 namespace AleCGN.Security.Cryptography.Encoders
@@ -12,29 +8,28 @@ namespace AleCGN.Security.Cryptography.Encoders
     public class HexadecimalEncoder : IEncoder
     {
         private const int _hexadecimalChunkSize = 2;
-        private const int _hexadecimalBase = 16;
         private const string _hexadecimalPrefix = "0x";
         private const int _hexadecimalPrefixLength = 2;
-        private static readonly Lazy<Regex> _regexHexadecimalString =
-            new Lazy<Regex>(() => new Regex(LibraryResources.RegularExpression_HexadecimalString));
+        private const string _hexadecimalChars = "0123456789ABCDEF";
 
         public string Encode(byte[] data)
         {
-            if (data == null || data.Length <= 0)
+            if (data == null || data.Length == 0)
             {
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, nameof(data));
             }
 
-            //var stringBuilder = new StringBuilder();
+            var encodedChars = new char[data.Length * _hexadecimalChunkSize];
 
-            //for (int i = 0; i < data.Length; i++)
-            //{
-            //    stringBuilder.Append(data[i].ToString("X2"));
-            //}
+            for (var index = 0; index < data.Length; index++)
+            {
+                var currentByte = data[index];
 
-            //return stringBuilder.ToString();
+                encodedChars[index * _hexadecimalChunkSize] = _hexadecimalChars[currentByte >> 4];
+                encodedChars[(index * _hexadecimalChunkSize) + 1] = _hexadecimalChars[currentByte & 0xF];
+            }
 
-            return string.Concat(data.Select(b => b.ToString("X2")));
+            return new string(encodedChars);
         }
 
         public string Encode(string text)
@@ -54,39 +49,52 @@ namespace AleCGN.Security.Cryptography.Encoders
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(hexadecimalString));
             }
 
-            CheckValidEncodedString(hexadecimalString);
+            var startIndex = (hexadecimalString.StartsWith(_hexadecimalPrefix, StringComparison.OrdinalIgnoreCase)
+                ? _hexadecimalPrefixLength
+                : 0);
+            var hexadecimalDigitsCount = hexadecimalString.Length - startIndex;
 
-            if (hexadecimalString.StartsWith(_hexadecimalPrefix, StringComparison.OrdinalIgnoreCase))
+            if (hexadecimalDigitsCount == 0 || hexadecimalDigitsCount % _hexadecimalChunkSize != 0)
             {
-                hexadecimalString = hexadecimalString.Substring(_hexadecimalPrefixLength);
+                ThrowFormattedArgumentException(LibraryResources.Validation_InvalidHexadecimalString, nameof(hexadecimalString));
             }
 
-            var data = new byte[hexadecimalString.Length / _hexadecimalChunkSize];
-            var index = 0;
+            var data = new byte[hexadecimalDigitsCount / _hexadecimalChunkSize];
 
-            foreach (var hexVal in ChunkHexadecimalString(hexadecimalString))
+            for (var index = 0; index < data.Length; index++)
             {
-                data[index] = Convert.ToByte(hexVal, _hexadecimalBase);
-                index++;
+                var highNibble = GetHexadecimalCharValue(hexadecimalString[startIndex + (index * _hexadecimalChunkSize)]);
+                var lowNibble = GetHexadecimalCharValue(hexadecimalString[startIndex + (index * _hexadecimalChunkSize) + 1]);
+
+                if (highNibble < 0 || lowNibble < 0)
+                {
+                    ThrowFormattedArgumentException(LibraryResources.Validation_InvalidHexadecimalString, nameof(hexadecimalString));
+                }
+
+                data[index] = (byte)((highNibble << 4) | lowNibble);
             }
 
             return data;
         }
 
-        private IEnumerable<string> ChunkHexadecimalString(string hexadecimalString)
+        private static int GetHexadecimalCharValue(char hexadecimalChar)
         {
-            for (var index = 0; index < hexadecimalString.Length; index += _hexadecimalChunkSize)
+            if (hexadecimalChar >= '0' && hexadecimalChar <= '9')
             {
-                yield return hexadecimalString.Substring(index, _hexadecimalChunkSize);
+                return hexadecimalChar - '0';
             }
-        }
 
-        private void CheckValidEncodedString(string hexadecimalString)
-        {
-            if (hexadecimalString.Length % _hexadecimalChunkSize != 0 || !_regexHexadecimalString.Value.IsMatch(hexadecimalString))
+            if (hexadecimalChar >= 'A' && hexadecimalChar <= 'F')
             {
-                ThrowFormattedArgumentException(LibraryResources.Validation_InvalidHexadecimalString, nameof(hexadecimalString));
+                return hexadecimalChar - 'A' + 10;
             }
+
+            if (hexadecimalChar >= 'a' && hexadecimalChar <= 'f')
+            {
+                return hexadecimalChar - 'a' + 10;
+            }
+
+            return -1;
         }
     }
 }

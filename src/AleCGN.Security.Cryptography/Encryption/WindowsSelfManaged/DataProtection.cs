@@ -1,10 +1,14 @@
-﻿#if NETSTANDARD2_0
-
-using AleCGN.Security.Cryptography.Encoders;
+﻿using AleCGN.Security.Cryptography.Encoders;
 using AleCGN.Security.Cryptography.Encoders.Extensions;
+using AleCGN.Security.Cryptography.Helpers;
 using AleCGN.Security.Cryptography.Resources;
 using System.Security.Cryptography;
+using System.Threading;
+using System.Threading.Tasks;
 using static AleCGN.Security.Cryptography.Helpers.ExceptionHelper;
+#if NET8_0_OR_GREATER
+using System.Runtime.Versioning;
+#endif
 
 namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
 {
@@ -12,6 +16,9 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
     /// This class and its methods are Windows-only, because ProtectedData is a wrapper/binding around native DPAPI (Data Protection API), only available on Windows.
     /// Using this class, you alleviate the difficult problem of explicitly generating, storing and managing a cryptographic key.
     /// </summary>
+#if NET8_0_OR_GREATER
+    [SupportedOSPlatform("windows")]
+#endif
     public class DataProtection : IDataProtection
     {
         #region Fields
@@ -42,7 +49,9 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, nameof(data));
             }
 
-            return ProtectedData.Protect(data, _configuration.OptionalEntropy, _configuration.Scope);
+            var protectedBlob = ProtectedData.Protect(data, _configuration.OptionalEntropy, _configuration.Scope);
+
+            return PayloadFormat.BuildBinary(PayloadAlgorithms.Dpapi, protectedBlob);
         }
 
         public string EncryptText(string text)
@@ -52,10 +61,10 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(text));
             }
 
-            var textBytes = text.ToUTF8Bytes();
-            var encryptedTextBytes = EncryptData(textBytes);
+            var payload = EncryptData(text.ToUTF8Bytes());
+            var fields = PayloadFormat.ParseBinary(payload, PayloadAlgorithms.Dpapi, 1, nameof(text));
 
-            return _encoder.Encode(encryptedTextBytes);
+            return PayloadFormat.BuildString(PayloadAlgorithms.DpapiName, null, PayloadFormat.GetField(payload, fields[0]));
         }
 
         public byte[] DecryptData(byte[] encryptedData)
@@ -65,7 +74,10 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentDataNullOrZeroLength, nameof(encryptedData));
             }
 
-            return ProtectedData.Unprotect(encryptedData, _configuration.OptionalEntropy, _configuration.Scope);
+            var fields = PayloadFormat.ParseBinary(encryptedData, PayloadAlgorithms.Dpapi, 1, nameof(encryptedData));
+            var protectedBlob = PayloadFormat.GetField(encryptedData, fields[0]);
+
+            return ProtectedData.Unprotect(protectedBlob, _configuration.OptionalEntropy, _configuration.Scope);
         }
 
         public string DecryptText(string encryptedText)
@@ -75,15 +87,32 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
                 ThrowFormattedArgumentException(LibraryResources.Validation_ArgumentStringNullEmpytOrWhitespace, nameof(encryptedText));
             }
 
-            var encryptedTextBytes = _encoder.Decode(encryptedText);
-            var decryptedTextBytes = DecryptData(encryptedTextBytes);
+            var (_, fields) = PayloadFormat.ParseString(
+                encryptedText, PayloadAlgorithms.DpapiName, 1, hasParameters: false, nameof(encryptedText));
 
-            return decryptedTextBytes.ToUTF8String();
+            var payload = PayloadFormat.BuildBinary(PayloadAlgorithms.Dpapi, fields[0]);
+
+            return DecryptData(payload).ToUTF8String();
         }
+
+        public Task<byte[]> EncryptDataAsync(byte[] data, CancellationToken cancellationToken = default)
+            => Task.Run(() => EncryptData(data), cancellationToken);
+
+        public Task<string> EncryptTextAsync(string text, CancellationToken cancellationToken = default)
+            => Task.Run(() => EncryptText(text), cancellationToken);
+
+        public Task<byte[]> DecryptDataAsync(byte[] encryptedData, CancellationToken cancellationToken = default)
+            => Task.Run(() => DecryptData(encryptedData), cancellationToken);
+
+        public Task<string> DecryptTextAsync(string encryptedText, CancellationToken cancellationToken = default)
+            => Task.Run(() => DecryptText(encryptedText), cancellationToken);
 
         #endregion Public methods
     }
 
+#if NET8_0_OR_GREATER
+    [SupportedOSPlatform("windows")]
+#endif
     public class DataProtectionConfiguration
     {
         public DataProtectionConfiguration(byte[] optionalEntropy, DataProtectionScope scope)
@@ -102,5 +131,3 @@ namespace AleCGN.Security.Cryptography.Encryption.WindowsSelfManaged
             => new DataProtectionConfiguration(optionalEntropy: null, DataProtectionScope.LocalMachine);
     }
 }
-
-#endif

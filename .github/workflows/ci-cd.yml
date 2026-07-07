@@ -1,0 +1,78 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+env:
+  LIBRARY_PROJECT: src/AleCGN.Security.Cryptography/AleCGN.Security.Cryptography.csproj
+  DI_PROJECT: src/AleCGN.Security.Cryptography.DependencyInjection/AleCGN.Security.Cryptography.DependencyInjection.csproj
+  TESTS_PROJECT: tests/AleCGN.Security.Cryptography.Tests/AleCGN.Security.Cryptography.Tests.csproj
+  NUGET_SOURCE: https://api.nuget.org/v3/index.json
+
+jobs:
+  build-and-test:
+    name: Build and test
+    # windows-latest is required: the test project also targets net48 to exercise
+    # the netstandard2.0/BouncyCastle code paths on .NET Framework.
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          # .NET 10 SDK builds all targets; the .NET 8 runtime is needed to run the net8.0 tests.
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Build library (netstandard2.0, netstandard2.1, net8.0, net10.0)
+        run: dotnet build ${{ env.LIBRARY_PROJECT }} -c Release
+
+      - name: Build DI extensions (netstandard2.0, net8.0, net10.0)
+        run: dotnet build ${{ env.DI_PROJECT }} -c Release
+
+      - name: Run tests (net8.0 + net10.0 + net48)
+        run: dotnet test ${{ env.TESTS_PROJECT }} -c Release --logger "trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: tests/**/TestResults/*.trx
+
+  publish-nuget:
+    name: Pack and publish to NuGet.org
+    needs: build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pack library
+        run: dotnet pack ${{ env.LIBRARY_PROJECT }} -c Release -o artifacts
+
+      - name: Pack DI extensions
+        run: dotnet pack ${{ env.DI_PROJECT }} -c Release -o artifacts
+
+      - name: Push packages to NuGet.org
+        # --skip-duplicate: pushing an already-published version is not an error,
+        # so pushes that don't bump <Version> won't fail the pipeline.
+        run: dotnet nuget push "artifacts/*.nupkg" --api-key "${{ secrets.NUGET_API_KEY }}" --source ${{ env.NUGET_SOURCE }} --skip-duplicate
+
+      - name: Upload packages as build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/*.nupkg
