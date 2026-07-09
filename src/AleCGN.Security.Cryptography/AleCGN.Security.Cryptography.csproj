@@ -6,9 +6,9 @@
     <!-- <GeneratePackageOnBuild>True</GeneratePackageOnBuild> -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <AssemblyVersion>2.0.0</AssemblyVersion>
-    <FileVersion>2.0.0</FileVersion>
-    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.1</AssemblyVersion>
+    <FileVersion>2.0.1</FileVersion>
+    <Version>2.0.1</Version>
     <Authors>AleCGN</Authors>
     <Product>AleCGN</Product>
     <Description>Easy-to-use cryptographic library: AES-GCM and ChaCha20-Poly1305 (AEAD), RSA-OAEP, RSA-PSS and ECDSA signatures, hashes and HMAC (MD5/SHA1/SHA2), PBKDF2, Argon2id and HKDF key derivation, self-contained password hashing (PHC format), password-based and chunked file encryption, DPAPI wrapper, Base64/Base64Url/Base32/Hexadecimal encoders. Works with .NET Framework 4.6.1+, .NET (Core) 2.0+, .NET 8 and .NET 10.</Description>
@@ -34,8 +34,8 @@
 
   <ItemGroup>
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.0" />
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.9" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.300" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>

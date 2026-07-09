@@ -57,7 +57,7 @@ The library multi-targets `netstandard2.0`, `netstandard2.1`, `net8.0` and `net1
 
 All payload formats are **byte-for-byte identical across frameworks**: data encrypted or signed on .NET Framework 4.8 decrypts and verifies on .NET 8 and vice versa (covered by cross-framework functional checks in the sample suite).
 
-Dependencies: [BouncyCastle.Cryptography](https://www.nuget.org/packages/BouncyCastle.Cryptography) 2.6.2, [System.Security.Cryptography.ProtectedData](https://www.nuget.org/packages/System.Security.Cryptography.ProtectedData) 9.0.0.
+Dependencies: [BouncyCastle.Cryptography](https://www.nuget.org/packages/BouncyCastle.Cryptography) 2.6.2, [System.Security.Cryptography.ProtectedData](https://www.nuget.org/packages/System.Security.Cryptography.ProtectedData) 10.0.9.
 
 ## Design principles
 
