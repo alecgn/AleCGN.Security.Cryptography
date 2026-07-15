@@ -1,4 +1,4 @@
-# AleCGN.Security.Cryptography
+# AleCGN.Security.Cryptography [![Nuget version (AleCGN.Security.Cryptography)](https://img.shields.io/nuget/v/AleCGN.Security.Cryptography)](https://nuget.org/packages/AleCGN.Security.Cryptography)  
 
 Easy-to-use, misuse-resistant cryptographic library for .NET. High-level, interface-based APIs over vetted primitives (native .NET cryptography and BouncyCastle), with safe defaults, self-contained payload formats and fixed-time verification everywhere.
 
